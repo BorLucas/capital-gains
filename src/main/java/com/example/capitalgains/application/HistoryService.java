@@ -35,14 +35,6 @@ public class HistoryService {
         return repository.save(Simulation.of(results, Instant.now(clock)));
     }
 
-    /** Stores several simulations in a single transaction (all or nothing). */
-    @Transactional
-    public List<Long> recordAll(List<List<TradeResult>> simulations) {
-        return simulations.stream()
-                .map(results -> record(results).getId())
-                .toList();
-    }
-
     @Transactional(readOnly = true)
     public List<SimulationSummary> list(Pageable page) {
         return repository.findAllByOrderByIdDesc(page);

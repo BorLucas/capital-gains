@@ -28,14 +28,14 @@ class ArchitectureTest {
     static final ArchRule domain_does_not_depend_on_outer_layers =
             noClasses().that().resideInAPackage("..domain..")
                     .should().dependOnClassesThat().resideInAnyPackage(
-                            "..web..", "..cli..", "..history..", "..application..", "..format..", "..config..")
+                            "..web..", "..cli..", "..history..", "..orders..", "..application..", "..format..", "..config..")
                     .because("the domain sits at the center: nothing from outside reaches into it");
 
     @ArchTest
     static final ArchRule format_does_not_depend_on_adapters =
             noClasses().that().resideInAPackage("..format..")
                     .should().dependOnClassesThat().resideInAnyPackage(
-                            "..web..", "..cli..", "..history..", "..application..")
+                            "..web..", "..cli..", "..history..", "..orders..", "..application..")
                     .because("the challenge format is shared; it does not know who uses it");
 
     @ArchTest
@@ -51,7 +51,7 @@ class ArchitectureTest {
 
     @ArchTest
     static final ArchRule persistence_does_not_depend_on_services_or_web =
-            noClasses().that().resideInAPackage("..history..")
+            noClasses().that().resideInAnyPackage("..history..", "..orders..")
                     .should().dependOnClassesThat().resideInAnyPackage("..application..", "..web..", "..cli..")
                     .because("persistence is infrastructure: the application depends on it, not the other way around");
 }
