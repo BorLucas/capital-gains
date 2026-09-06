@@ -1,5 +1,5 @@
-### Uma simulacao -> 201 Created + Location: /api/simulacoes/{id}
-POST http://localhost:8080/api/impostos/simulacao
+### 1. Submit one simulation -> 202 Accepted + Location: /api/taxes/orders/{id}
+POST http://localhost:8080/api/taxes/orders
 Content-Type: application/json
 
 [
@@ -8,8 +8,14 @@ Content-Type: application/json
   {"operation": "sell", "unit-cost": 5.00,  "quantity": 5000}
 ]
 
-### Lote de simulacoes (uma lista por linha do desafio) -> 200
-POST http://localhost:8080/api/impostos/lote
+### 2. Poll the order (repeat until status is COMPLETED or FAILED)
+GET http://localhost:8080/api/taxes/orders/REPLACE-WITH-ORDER-ID
+
+### 3. Read the assessed simulation (simulationUrl from the completed order)
+GET http://localhost:8080/api/simulations/1
+
+### Submit a basket of simulations -> 202 with one order per simulation
+POST http://localhost:8080/api/taxes/orders/batch
 Content-Type: application/json
 
 [
@@ -25,14 +31,11 @@ Content-Type: application/json
   ]
 ]
 
-### Historico paginado (resumo)
-GET http://localhost:8080/api/simulacoes?page=0&size=20
+### Paginated history (summary)
+GET http://localhost:8080/api/simulations?page=0&size=20
 
-### Detalhe de uma simulacao
-GET http://localhost:8080/api/simulacoes/1
-
-### Venda maior que a carteira -> 422 Unprocessable Entity
-POST http://localhost:8080/api/impostos/simulacao
+### Sell larger than the portfolio -> 202 now, order ends FAILED after assessment
+POST http://localhost:8080/api/taxes/orders
 Content-Type: application/json
 
 [
@@ -40,10 +43,10 @@ Content-Type: application/json
   {"operation": "sell", "unit-cost": 20.00, "quantity": 200}
 ]
 
-### Operacao desconhecida -> 400 Bad Request
-POST http://localhost:8080/api/impostos/simulacao
+### Unknown operation -> 400 Bad Request at submission
+POST http://localhost:8080/api/taxes/orders
 Content-Type: application/json
 
 [
-  {"operation": "transferir", "unit-cost": 10.00, "quantity": 100}
+  {"operation": "transfer", "unit-cost": 10.00, "quantity": 100}
 ]

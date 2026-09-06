@@ -11,11 +11,11 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.estudos</groupId>
-    <artifactId>ganho-de-capital</artifactId>
+    <groupId>com.example</groupId>
+    <artifactId>capital-gains</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>ganho-de-capital</name>
-    <description>Calculo de imposto sobre ganho de capital em operacoes de acoes (estudo de Spring Boot)</description>
+    <name>capital-gains</name>
+    <description>Capital-gains tax calculation on stock trades (Spring Boot study project)</description>
 
     <properties>
         <java.version>21</java.version>
