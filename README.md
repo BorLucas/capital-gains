@@ -8,9 +8,14 @@ Three ways to use it:
 
 | Way | For what |
 |-----|----------|
-| **REST API** | main use; calculates and stores the history |
+| **REST API** | main use; submit an order, poll it until assessed, read the stored result |
 | **Swagger UI** (`/swagger-ui.html`) | try the API from the browser |
-| **CLI** (`--spring.profiles.active=cli`) | the challenge's original format: reads JSON from stdin |
+| **CLI** (`--spring.profiles.active=cli`) | the challenge's original format: reads JSON from stdin, synchronous |
+
+The API is **asynchronous**, modeled like placing broker orders: a request is
+*accepted* (`202`) and queued, a background worker assesses it, and the client
+polls the order until it is `COMPLETED` (with a link to the stored simulation)
+or `FAILED` (with a reason). See [`docs/async-orders.md`](docs/async-orders.md).
 
 ## Stack
 
@@ -22,7 +27,7 @@ Three ways to use it:
 ## How to run
 
 ```bash
-mvn test                 # 46 tests
+mvn test                 # 42 tests
 mvn spring-boot:run      # starts the API on port 8080
 mvn -DskipTests package  # builds the jar
 ```
@@ -42,12 +47,13 @@ java -jar target/capital-gains-0.0.1-SNAPSHOT.jar --spring.profiles.active=cli <
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| `POST` | `/api/taxes/simulation` | calculates one simulation · **201** + `Location: /api/simulations/{id}` |
-| `POST` | `/api/taxes/batch` | several independent simulations, all in one transaction |
+| `POST` | `/api/taxes/orders` | submit one simulation · **202** + `Location: /api/taxes/orders/{id}` |
+| `POST` | `/api/taxes/orders/batch` | submit a basket of simulations · **202** |
+| `GET`  | `/api/taxes/orders/{id}` | poll one order (`PENDING` → `PROCESSING` → `COMPLETED`/`FAILED`) |
 | `GET`  | `/api/simulations?page=&size=` | paginated history (summary) |
 | `GET`  | `/api/simulations/{id}` | detail: each trade and the tax it generated |
 
-`POST /api/taxes/simulation`
+**1. Submit** `POST /api/taxes/orders`
 
 ```json
 [
@@ -56,13 +62,31 @@ java -jar target/capital-gains-0.0.1-SNAPSHOT.jar --spring.profiles.active=cli <
   {"operation": "sell", "unit-cost": 5.00,  "quantity": 5000}
 ]
 ```
-→ `201 Created`, `Location: /api/simulations/1`
+→ `202 Accepted`, `Location: /api/taxes/orders/1b4e...`
 ```json
-[{"tax": 0.00}, {"tax": 10000.00}, {"tax": 0.00}]
+{"id": "1b4e...", "status": "PENDING", "submittedAt": "..."}
 ```
 
-Errors follow RFC 7807 (`application/problem+json`): `400` invalid input,
-`422` sell larger than the portfolio, `404` missing simulation.
+**2. Poll** `GET /api/taxes/orders/1b4e...` until it settles
+
+```json
+{"id": "1b4e...", "status": "COMPLETED", "simulationId": 1,
+ "simulationUrl": "/api/simulations/1", "finishedAt": "..."}
+```
+
+**3. Read the result** `GET /api/simulations/1`
+
+```json
+{"id": 1, "totalTax": 10000.00, "trades": [
+  {"operation": "buy",  "unit-cost": 10.00, "quantity": 10000, "tax": 0.00},
+  {"operation": "sell", "unit-cost": 20.00, "quantity": 5000,  "tax": 10000.00},
+  {"operation": "sell", "unit-cost": 5.00,  "quantity": 5000,  "tax": 0.00}
+]}
+```
+
+Trades are validated at submission (`400` on malformed input). A sell larger
+than the position is only caught while assessing → the order ends `FAILED` with
+`failureReason`. Errors follow RFC 7807 (`application/problem+json`).
 
 Ready-made examples in [`requests.http`](requests.http).
 
@@ -78,7 +102,9 @@ Ready-made examples in [`requests.http`](requests.http).
 5. Selling more than the portfolio holds → error (`422`).
 
 The 9 official cases are in
-[`TaxCalculatorTest`](src/test/java/com/example/capitalgains/domain/TaxCalculatorTest.java).
+[`TaxCalculatorTest`](src/test/java/com/example/capitalgains/domain/TaxCalculatorTest.java);
+the async flow in
+[`OrderControllerTest`](src/test/java/com/example/capitalgains/web/OrderControllerTest.java).
 
 ## Architecture
 
@@ -88,10 +114,12 @@ domain/                pure Java core (no Spring/JPA) — checked by ArchUnit
   portfolio/            Portfolio aggregate + state machine (PortfolioState, TradeEvent)
   error/               CapitalGainsException hierarchy
 format/                DTOs of the challenge format, shared by web and cli
-application/            use cases (CalculateTaxService, HistoryService)
-history/               JPA persistence + read models (summary and detail projections)
+orders/                SimulationOrder (the async work queue) + OrderStatus + read model
+application/            use cases: SubmitOrderService, OrderProcessor (the worker),
+                       OrderExecution, OrderQueryService, HistoryService
+history/               JPA persistence + read models for the assessed simulations
 web/                   REST controllers + error translation (RFC 7807)
-cli/                   stdin inbound adapter (profile "cli")
+cli/                   stdin inbound adapter (profile "cli", synchronous)
 config/                Clock, OpenAPI
 ```
 
@@ -110,3 +138,7 @@ in
 - History in **in-memory** H2: gone when the application stops.
 - `totalTax` and `tradeCount` are denormalized on `Simulation` (immutable once
   created), so the listing does not load the collection of items.
+- The async queue is the `simulation_order` **table itself** (outbox pattern),
+  not an external broker — no infra to run. `OrderProcessor` polls it;
+  `OrderExecution` is a separate bean so its `@Transactional` boundary actually
+  applies. Details in [`docs/async-orders.md`](docs/async-orders.md).

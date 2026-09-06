@@ -4,6 +4,7 @@ import com.example.capitalgains.domain.error.CapitalGainsException;
 import com.example.capitalgains.domain.error.InvalidTradeException;
 import com.example.capitalgains.domain.error.SellExceedsPortfolioException;
 import com.example.capitalgains.history.SimulationNotFoundException;
+import com.example.capitalgains.orders.OrderNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -26,8 +27,8 @@ import java.util.List;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
-    @ExceptionHandler(SimulationNotFoundException.class)
-    public ProblemDetail notFound(SimulationNotFoundException ex) {
+    @ExceptionHandler({SimulationNotFoundException.class, OrderNotFoundException.class})
+    public ProblemDetail notFound(RuntimeException ex) {
         return problem(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
