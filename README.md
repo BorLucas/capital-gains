@@ -1,60 +1,53 @@
-# Ganho de Capital — cálculo de imposto sobre operações de ações
+# Capital Gains — tax calculation on stock trades
 
-Projeto de **estudo de Java + Spring Boot**. Calcula o imposto devido sobre o
-lucro (ou prejuízo) de operações de compra e venda de ações, seguindo as regras
-do desafio "Ganho de Capital".
+A **Java + Spring Boot study project**. It calculates the tax owed on the profit
+(or loss) of stock buy and sell trades, following the rules of the "Capital
+Gains" challenge.
 
-Três formas de uso:
+Three ways to use it:
 
-| Forma | Para quê |
-|-------|----------|
-| **API REST** | uso principal; calcula e guarda o histórico |
-| **Swagger UI** (`/swagger-ui.html`) | testar a API pelo navegador |
-| **CLI** (`--spring.profiles.active=cli`) | formato original do desafio: lê JSON do stdin |
+| Way | For what |
+|-----|----------|
+| **REST API** | main use; calculates and stores the history |
+| **Swagger UI** (`/swagger-ui.html`) | try the API from the browser |
+| **CLI** (`--spring.profiles.active=cli`) | the challenge's original format: reads JSON from stdin |
 
 ## Stack
 
 - Java 21 · Spring Boot 3.3.5 · Maven
 - `spring-boot-starter-web`, `-validation`, `-data-jpa`
-- H2 (banco em memória) · springdoc-openapi (Swagger UI)
-- Testes: JUnit 5 + AssertJ + MockMvc + **ArchUnit** (regras de arquitetura)
+- H2 (in-memory database) · springdoc-openapi (Swagger UI)
+- Tests: JUnit 5 + AssertJ + MockMvc + **ArchUnit** (architecture rules)
 
-## Como rodar
-
-JDK 21 e Maven já estão instalados e no PATH do usuário. Numa sessão antiga:
-
-```powershell
-$env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot"
-$env:Path = "$env:JAVA_HOME\bin;C:\Users\drume\tools\apache-maven-3.9.9\bin;$env:Path"
-```
+## How to run
 
 ```bash
-mvn test                 # 43 testes
-mvn spring-boot:run      # sobe a API na porta 8080
-mvn -DskipTests package  # gera o jar
+mvn test                 # 46 tests
+mvn spring-boot:run      # starts the API on port 8080
+mvn -DskipTests package  # builds the jar
 ```
 
-### Swagger UI / Console H2
+### Swagger UI / H2 console
 
-- <http://localhost:8080/swagger-ui.html> · spec em `/v3/api-docs`
-- <http://localhost:8080/h2-console> — JDBC URL `jdbc:h2:mem:ganhodecapital`, user `sa`, sem senha
+- <http://localhost:8080/swagger-ui.html> · spec at `/v3/api-docs`
+- <http://localhost:8080/h2-console> — JDBC URL `jdbc:h2:mem:capitalgains`, user `sa`, no password
 
-### Modo CLI
+### CLI mode
 
-```powershell
-cmd /c "java -jar target\ganho-de-capital-0.0.1-SNAPSHOT.jar --spring.profiles.active=cli < exemplos\entrada.txt"
+```bash
+java -jar target/capital-gains-0.0.1-SNAPSHOT.jar --spring.profiles.active=cli < examples/input.txt
 ```
 
 ## Endpoints
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| `POST` | `/api/impostos/simulacao` | calcula uma simulação · **201** + `Location: /api/simulacoes/{id}` |
-| `POST` | `/api/impostos/lote` | várias simulações independentes, tudo numa transação |
-| `GET`  | `/api/simulacoes?page=&size=` | histórico paginado (resumo) |
-| `GET`  | `/api/simulacoes/{id}` | detalhe: cada operação e o imposto que gerou |
+| Method | Route | Description |
+|--------|-------|-------------|
+| `POST` | `/api/taxes/simulation` | calculates one simulation · **201** + `Location: /api/simulations/{id}` |
+| `POST` | `/api/taxes/batch` | several independent simulations, all in one transaction |
+| `GET`  | `/api/simulations?page=&size=` | paginated history (summary) |
+| `GET`  | `/api/simulations/{id}` | detail: each trade and the tax it generated |
 
-`POST /api/impostos/simulacao`
+`POST /api/taxes/simulation`
 
 ```json
 [
@@ -63,55 +56,57 @@ cmd /c "java -jar target\ganho-de-capital-0.0.1-SNAPSHOT.jar --spring.profiles.a
   {"operation": "sell", "unit-cost": 5.00,  "quantity": 5000}
 ]
 ```
-→ `201 Created`, `Location: /api/simulacoes/1`
+→ `201 Created`, `Location: /api/simulations/1`
 ```json
 [{"tax": 0.00}, {"tax": 10000.00}, {"tax": 0.00}]
 ```
 
-Erros seguem RFC 7807 (`application/problem+json`): `400` entrada inválida,
-`422` venda maior que a carteira, `404` simulação inexistente.
+Errors follow RFC 7807 (`application/problem+json`): `400` invalid input,
+`422` sell larger than the portfolio, `404` missing simulation.
 
-Exemplos prontos em [`requests.http`](requests.http).
+Ready-made examples in [`requests.http`](requests.http).
 
-## Regras implementadas
+## Implemented rules
 
-1. **20%** sobre o lucro das vendas.
-2. **Compra** não paga imposto; atualiza o **preço médio ponderado**
-   (arredondado a 2 casas). Carteira zerada → a próxima compra reinicia o preço médio.
-3. **Prejuízo é sempre acumulado** (mesmo em venda isenta) e abatido de lucros futuros.
-4. **Isenção** quando `unit-cost × quantity ≤ R$ 20.000`: sem imposto, e um lucro
-   isento **não** consome o prejuízo acumulado.
-5. Vender mais do que há em carteira → erro (`422`).
+1. **20%** on the profit of sells.
+2. **Buys** pay no tax; they update the **weighted average price** (rounded to
+   2 decimal places). An emptied portfolio → the next buy restarts the average price.
+3. **A loss is always accumulated** (even on an exempt sell) and offset against
+   future profits.
+4. **Exemption** when `unit-cost × quantity ≤ 20,000`: no tax, and an exempt
+   profit does **not** consume the accumulated loss.
+5. Selling more than the portfolio holds → error (`422`).
 
-Os 9 casos oficiais estão em
-[`CalculadoraDeImpostoTest`](src/test/java/com/estudos/ganhodecapital/domain/CalculadoraDeImpostoTest.java).
+The 9 official cases are in
+[`TaxCalculatorTest`](src/test/java/com/example/capitalgains/domain/TaxCalculatorTest.java).
 
-## Arquitetura
+## Architecture
 
 ```
-domain/                núcleo Java puro (sem Spring/JPA) — testado pelo ArchUnit
-  Dinheiro, Operacao, Imposto, ResultadoOperacao, TipoOperacao
-  carteira/            agregado Carteira + máquina de estados (EstadoCarteira, EventoOperacao)
-  erro/                hierarquia GanhoDeCapitalException
-formato/               DTOs do formato do desafio, compartilhados por web e cli
-application/            casos de uso (CalcularImpostoService, HistoricoService)
-historico/             persistência JPA + read models (projeção de resumo, detalhe)
-web/                   controllers REST + tradução de erros (RFC 7807)
-cli/                   adapter de entrada por stdin (perfil "cli")
+domain/                pure Java core (no Spring/JPA) — checked by ArchUnit
+  Money, Trade, Tax, TradeResult, TradeType
+  portfolio/            Portfolio aggregate + state machine (PortfolioState, TradeEvent)
+  error/               CapitalGainsException hierarchy
+format/                DTOs of the challenge format, shared by web and cli
+application/            use cases (CalculateTaxService, HistoryService)
+history/               JPA persistence + read models (summary and detail projections)
+web/                   REST controllers + error translation (RFC 7807)
+cli/                   stdin inbound adapter (profile "cli")
 config/                Clock, OpenAPI
 ```
 
-A `Carteira` é uma pequena **máquina de estados** — ver
-[`docs/maquina-de-estados.md`](docs/maquina-de-estados.md). As regras de camada
-(domínio não depende de framework, web e cli não se conhecem, etc.) são
-verificadas em
-[`ArquiteturaTest`](src/test/java/com/estudos/ganhodecapital/arquitetura/ArquiteturaTest.java).
+The `Portfolio` is a small **state machine** — see
+[`docs/state-machine.md`](docs/state-machine.md). The layer rules (domain does
+not depend on frameworks, web and cli do not know each other, etc.) are checked
+in
+[`ArchitectureTest`](src/test/java/com/example/capitalgains/architecture/ArchitectureTest.java).
 
-## Decisões de modelagem
+## Modeling decisions
 
-- **Lucro isento não abate prejuízo acumulado** — única interpretação que fecha
-  os casos 6 e 9 juntos.
-- `Dinheiro` centraliza a regra de arredondamento (2 casas, `HALF_UP`).
-- Histórico em H2 **em memória**: some quando a aplicação para.
-- `impostoTotal` e `quantidadeOperacoes` são desnormalizados na `Simulacao`
-  (imutável após criada), para a listagem não carregar a coleção de itens.
+- **An exempt profit does not offset the accumulated loss** — the only reading
+  that makes cases 6 and 9 pass together.
+- `Money` centralizes the rounding rule (2 decimal places, `HALF_UP`) and
+  rejects input with more precision at the edge.
+- History in **in-memory** H2: gone when the application stops.
+- `totalTax` and `tradeCount` are denormalized on `Simulation` (immutable once
+  created), so the listing does not load the collection of items.
