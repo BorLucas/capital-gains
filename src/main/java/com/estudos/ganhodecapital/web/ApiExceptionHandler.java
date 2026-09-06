@@ -5,8 +5,6 @@ import com.estudos.ganhodecapital.domain.erro.OperacaoInvalidaException;
 import com.estudos.ganhodecapital.domain.erro.VendaSuperaCarteiraException;
 import com.estudos.ganhodecapital.historico.SimulacaoNaoEncontradaException;
 import jakarta.validation.ConstraintViolationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -27,8 +25,6 @@ import java.util.List;
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {
-
-    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(SimulacaoNaoEncontradaException.class)
     public ProblemDetail naoEncontrada(SimulacaoNaoEncontradaException ex) {
@@ -86,12 +82,6 @@ public class ApiExceptionHandler {
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ProblemDetail midiaNaoSuportada(HttpMediaTypeNotSupportedException ex) {
         return problema(HttpStatus.UNSUPPORTED_MEDIA_TYPE, ex.getMessage());
-    }
-
-    @ExceptionHandler(Exception.class)
-    public ProblemDetail erroInesperado(Exception ex) {
-        log.error("erro nao tratado", ex);
-        return problema(HttpStatus.INTERNAL_SERVER_ERROR, "erro interno");
     }
 
     private static ProblemDetail problema(HttpStatus status, String detalhe) {

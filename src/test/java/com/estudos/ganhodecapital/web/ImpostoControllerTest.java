@@ -122,4 +122,20 @@ class ImpostoControllerTest {
         mockMvc.perform(post("/api/impostos/simulacao").contentType("application/json").content("{ nao e json valido "))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void custoUnitarioComMaisDeDuasCasasDecimaisRetorna400() throws Exception {
+        String body = """
+                [ {"operation":"buy", "unit-cost":10.005, "quantity":100} ]
+                """;
+
+        mockMvc.perform(post("/api/impostos/simulacao").contentType("application/json").content(body))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void idNaoNumericoNaRotaDeDetalheRetorna400() throws Exception {
+        mockMvc.perform(get("/api/simulacoes/abc"))
+                .andExpect(status().isBadRequest());
+    }
 }
