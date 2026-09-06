@@ -1,21 +1,35 @@
 package com.estudos.ganhodecapital.domain;
 
+import com.estudos.ganhodecapital.domain.erro.OperacaoInvalidaException;
+
 /**
- * Tipo de operacao no mercado de acoes.
- * No JSON de entrada do desafio os valores sao "buy" e "sell".
+ * Tipo de operacao no mercado de acoes. O codigo ({@code "buy"} / {@code "sell"})
+ * e o formato usado na entrada e na saida do desafio; a conversao nas duas
+ * direcoes mora aqui, e nao espalhada pelos DTOs.
  */
 public enum TipoOperacao {
-    COMPRA,
-    VENDA;
 
-    public static TipoOperacao doTexto(String valor) {
-        if (valor == null) {
-            throw new IllegalArgumentException("operacao nao informada");
+    COMPRA("buy"),
+    VENDA("sell");
+
+    private final String codigo;
+
+    TipoOperacao(String codigo) {
+        this.codigo = codigo;
+    }
+
+    public String codigo() {
+        return codigo;
+    }
+
+    public static TipoOperacao doCodigo(String codigo) {
+        if (codigo == null) {
+            throw new OperacaoInvalidaException("operation e obrigatorio (buy ou sell)");
         }
-        return switch (valor.trim().toLowerCase()) {
+        return switch (codigo.trim().toLowerCase()) {
             case "buy", "compra" -> COMPRA;
             case "sell", "venda" -> VENDA;
-            default -> throw new IllegalArgumentException("operacao invalida: " + valor);
+            default -> throw new OperacaoInvalidaException("operation invalido: " + codigo);
         };
     }
 }

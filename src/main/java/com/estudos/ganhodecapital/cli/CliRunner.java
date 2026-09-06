@@ -2,8 +2,9 @@ package com.estudos.ganhodecapital.cli;
 
 import com.estudos.ganhodecapital.domain.CalculadoraDeImposto;
 import com.estudos.ganhodecapital.domain.Operacao;
-import com.estudos.ganhodecapital.web.dto.ImpostoResponse;
-import com.estudos.ganhodecapital.web.dto.OperacaoRequest;
+import com.estudos.ganhodecapital.domain.ResultadoOperacao;
+import com.estudos.ganhodecapital.formato.ImpostoJson;
+import com.estudos.ganhodecapital.formato.OperacaoJson;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.ApplicationArguments;
@@ -12,10 +13,12 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -27,16 +30,20 @@ import java.util.List;
  * java -jar target/ganho-de-capital-0.0.1-SNAPSHOT.jar --spring.profiles.active=cli &lt; exemplos/entrada.txt
  * </pre>
  *
- * Reaproveita o mesmo nucleo {@link CalculadoraDeImposto} da API; nao grava no historico.
+ * <p>Fail-fast: le e valida <b>todas</b> as linhas, calcula <b>tudo</b>, e so
+ * entao imprime. Uma linha invalida aborta antes de qualquer saida parcial.</p>
+ *
+ * <p>Reaproveita o nucleo {@link CalculadoraDeImposto} e o formato compartilhado
+ * ({@code formato.*}); nao conhece a camada web nem grava no historico.</p>
  */
 @Component
 @Profile("cli")
 public class CliRunner implements ApplicationRunner {
 
     private static final String BOM = "﻿";
+    private static final CalculadoraDeImposto CALCULADORA = new CalculadoraDeImposto();
 
     private final ObjectMapper mapper;
-    private final CalculadoraDeImposto calculadora = new CalculadoraDeImposto();
 
     public CliRunner(ObjectMapper mapper) {
         this.mapper = mapper;
@@ -44,12 +51,25 @@ public class CliRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
-        processar(System.in.readAllBytes(), System.out);
+        processar(System.in, System.out);
     }
 
-    void processar(byte[] entrada, PrintStream saida) throws Exception {
+    void processar(InputStream entrada, PrintStream saida) throws IOException {
+        List<List<Operacao>> simulacoes = lerSimulacoes(entrada);
+
+        List<List<ResultadoOperacao>> resultados = simulacoes.stream()
+                .map(CALCULADORA::calcular)
+                .toList();
+
+        for (List<ResultadoOperacao> simulacao : resultados) {
+            saida.println(mapper.writeValueAsString(ImpostoJson.deResultados(simulacao)));
+        }
+    }
+
+    private List<List<Operacao>> lerSimulacoes(InputStream entrada) throws IOException {
+        List<List<Operacao>> simulacoes = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(new ByteArrayInputStream(entrada), StandardCharsets.UTF_8))) {
+                new InputStreamReader(entrada, StandardCharsets.UTF_8))) {
 
             String linha;
             boolean primeira = true;
@@ -61,13 +81,10 @@ public class CliRunner implements ApplicationRunner {
                 if (linha.isBlank()) {
                     continue;
                 }
-                List<OperacaoRequest> pedido = mapper.readValue(linha, new TypeReference<>() {});
-                List<Operacao> operacoes = pedido.stream().map(OperacaoRequest::paraDominio).toList();
-                List<ImpostoResponse> resposta = calculadora.calcular(operacoes).stream()
-                        .map(ImpostoResponse::de)
-                        .toList();
-                saida.println(mapper.writeValueAsString(resposta));
+                List<OperacaoJson> pedido = mapper.readValue(linha, new TypeReference<>() {});
+                simulacoes.add(OperacaoJson.paraDominio(pedido));
             }
         }
+        return simulacoes;
     }
 }

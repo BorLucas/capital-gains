@@ -5,9 +5,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -19,7 +22,7 @@ class ImpostoControllerTest {
     MockMvc mockMvc;
 
     @Test
-    void calculaUmaSimulacao() throws Exception {
+    void calculaSimulacaoERetorna201ComLocation() throws Exception {
         String body = """
                 [
                   {"operation":"buy",  "unit-cost":10.00, "quantity":10000},
@@ -29,7 +32,8 @@ class ImpostoControllerTest {
                 """;
 
         mockMvc.perform(post("/api/impostos/simulacao").contentType("application/json").content(body))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location", org.hamcrest.Matchers.startsWith("/api/simulacoes/")))
                 .andExpect(jsonPath("$[0].tax").value(0.00))
                 .andExpect(jsonPath("$[1].tax").value(10000.00))
                 .andExpect(jsonPath("$[2].tax").value(0.00));
@@ -61,13 +65,30 @@ class ImpostoControllerTest {
                   {"operation":"sell","unit-cost":45.00,"quantity":5000} ]
                 """;
 
-        mockMvc.perform(post("/api/impostos/simulacao").contentType("application/json").content(body))
-                .andExpect(status().isOk());
+        MvcResult resultado = mockMvc.perform(post("/api/impostos/simulacao")
+                        .contentType("application/json").content(body))
+                .andExpect(status().isCreated())
+                .andReturn();
 
-        mockMvc.perform(get("/api/simulacoes"))
+        String location = resultado.getResponse().getHeader("Location");
+        assertThat(location).isNotNull();
+
+        mockMvc.perform(get(location))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").exists())
-                .andExpect(jsonPath("$[0].impostoTotal").value(35000.00));
+                .andExpect(jsonPath("$.impostoTotal").value(35000.00))
+                .andExpect(jsonPath("$.operacoes[1].tax").value(35000.00))
+                .andExpect(jsonPath("$.operacoes[1]['unit-cost']").value(45.00));
+    }
+
+    @Test
+    void vendaMaiorQueCarteiraRetorna422() throws Exception {
+        String body = """
+                [ {"operation":"buy","unit-cost":10.00,"quantity":100},
+                  {"operation":"sell","unit-cost":20.00,"quantity":200} ]
+                """;
+
+        mockMvc.perform(post("/api/impostos/simulacao").contentType("application/json").content(body))
+                .andExpect(status().isUnprocessableEntity());
     }
 
     @Test
@@ -77,7 +98,7 @@ class ImpostoControllerTest {
     }
 
     @Test
-    void rejeitaOperacaoInvalida() throws Exception {
+    void operacaoDesconhecidaRetorna400() throws Exception {
         String body = """
                 [ {"operation":"transferir", "unit-cost":10.00, "quantity":100} ]
                 """;
@@ -87,12 +108,18 @@ class ImpostoControllerTest {
     }
 
     @Test
-    void rejeitaQuantidadeNegativa() throws Exception {
+    void quantidadeNegativaRetorna400() throws Exception {
         String body = """
                 [ {"operation":"buy", "unit-cost":10.00, "quantity":-5} ]
                 """;
 
         mockMvc.perform(post("/api/impostos/simulacao").contentType("application/json").content(body))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void jsonMalformadoRetorna400() throws Exception {
+        mockMvc.perform(post("/api/impostos/simulacao").contentType("application/json").content("{ nao e json valido "))
                 .andExpect(status().isBadRequest());
     }
 }

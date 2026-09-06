@@ -1,10 +1,10 @@
 package com.estudos.ganhodecapital.domain;
 
+import com.estudos.ganhodecapital.domain.erro.VendaSuperaCarteiraException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -14,9 +14,9 @@ class CalculadoraDeImpostoTest {
 
     private final CalculadoraDeImposto calculadora = new CalculadoraDeImposto();
 
-    private List<String> impostosComoTexto(List<Operacao> operacoes) {
+    private List<String> impostos(List<Operacao> operacoes) {
         return calculadora.calcular(operacoes).stream()
-                .map(i -> i.valor().toPlainString())
+                .map(r -> r.imposto().emReais().toPlainString())
                 .toList();
     }
 
@@ -32,7 +32,7 @@ class CalculadoraDeImpostoTest {
                     Operacao.venda("15.00", 50),
                     Operacao.venda("15.00", 50));
 
-            assertThat(impostosComoTexto(ops)).containsExactly("0.00", "0.00", "0.00");
+            assertThat(impostos(ops)).containsExactly("0.00", "0.00", "0.00");
         }
 
         @Test
@@ -43,7 +43,7 @@ class CalculadoraDeImpostoTest {
                     Operacao.venda("20.00", 5000),
                     Operacao.venda("5.00", 5000));
 
-            assertThat(impostosComoTexto(ops)).containsExactly("0.00", "10000.00", "0.00");
+            assertThat(impostos(ops)).containsExactly("0.00", "10000.00", "0.00");
         }
 
         @Test
@@ -54,7 +54,7 @@ class CalculadoraDeImpostoTest {
                     Operacao.venda("5.00", 5000),
                     Operacao.venda("20.00", 3000));
 
-            assertThat(impostosComoTexto(ops)).containsExactly("0.00", "0.00", "1000.00");
+            assertThat(impostos(ops)).containsExactly("0.00", "0.00", "1000.00");
         }
 
         @Test
@@ -65,7 +65,7 @@ class CalculadoraDeImpostoTest {
                     Operacao.compra("25.00", 5000),
                     Operacao.venda("15.00", 10000));
 
-            assertThat(impostosComoTexto(ops)).containsExactly("0.00", "0.00", "0.00");
+            assertThat(impostos(ops)).containsExactly("0.00", "0.00", "0.00");
         }
 
         @Test
@@ -77,7 +77,7 @@ class CalculadoraDeImpostoTest {
                     Operacao.venda("15.00", 10000),
                     Operacao.venda("25.00", 5000));
 
-            assertThat(impostosComoTexto(ops)).containsExactly("0.00", "0.00", "0.00", "10000.00");
+            assertThat(impostos(ops)).containsExactly("0.00", "0.00", "0.00", "10000.00");
         }
 
         @Test
@@ -90,8 +90,7 @@ class CalculadoraDeImpostoTest {
                     Operacao.venda("20.00", 2000),
                     Operacao.venda("25.00", 1000));
 
-            assertThat(impostosComoTexto(ops))
-                    .containsExactly("0.00", "0.00", "0.00", "0.00", "3000.00");
+            assertThat(impostos(ops)).containsExactly("0.00", "0.00", "0.00", "0.00", "3000.00");
         }
 
         @Test
@@ -108,7 +107,7 @@ class CalculadoraDeImpostoTest {
                     Operacao.venda("30.00", 4350),
                     Operacao.venda("30.00", 650));
 
-            assertThat(impostosComoTexto(ops)).containsExactly(
+            assertThat(impostos(ops)).containsExactly(
                     "0.00", "0.00", "0.00", "0.00", "3000.00",
                     "0.00", "0.00", "3700.00", "0.00");
         }
@@ -122,8 +121,7 @@ class CalculadoraDeImpostoTest {
                     Operacao.compra("20.00", 10000),
                     Operacao.venda("50.00", 10000));
 
-            assertThat(impostosComoTexto(ops))
-                    .containsExactly("0.00", "80000.00", "0.00", "60000.00");
+            assertThat(impostos(ops)).containsExactly("0.00", "80000.00", "0.00", "60000.00");
         }
 
         @Test
@@ -139,7 +137,7 @@ class CalculadoraDeImpostoTest {
                     Operacao.venda("12000.00", 10),
                     Operacao.venda("15000.00", 3));
 
-            assertThat(impostosComoTexto(ops)).containsExactly(
+            assertThat(impostos(ops)).containsExactly(
                     "0.00", "0.00", "0.00", "0.00", "0.00",
                     "0.00", "1000.00", "2400.00");
         }
@@ -150,13 +148,6 @@ class CalculadoraDeImpostoTest {
     class RegrasIsoladas {
 
         @Test
-        @DisplayName("compra nunca paga imposto")
-        void compraNaoPagaImposto() {
-            assertThat(impostosComoTexto(List.of(Operacao.compra("100.00", 1000))))
-                    .containsExactly("0.00");
-        }
-
-        @Test
         @DisplayName("prejuizo em venda isenta ainda e acumulado")
         void prejuizoIsentoAcumula() {
             var ops = List.of(
@@ -164,8 +155,7 @@ class CalculadoraDeImpostoTest {
                     Operacao.venda("1.00", 1000),   // isenta, prejuizo 9000
                     Operacao.venda("30.00", 5000)); // lucro 100000, tributavel 100000 - 9000
 
-            // (100000 - 9000) * 0.20 = 18200.00
-            assertThat(impostosComoTexto(ops)).containsExactly("0.00", "0.00", "18200.00");
+            assertThat(impostos(ops)).containsExactly("0.00", "0.00", "18200.00");
         }
 
         @Test
@@ -173,11 +163,11 @@ class CalculadoraDeImpostoTest {
         void lucroIsentoNaoConsomePrejuizo() {
             var ops = List.of(
                     Operacao.compra("10.00", 10000),
-                    Operacao.venda("1.00", 1000),    // isenta, prejuizo 9000
-                    Operacao.venda("30.00", 500),    // isenta (15000), lucro NAO abate prejuizo
-                    Operacao.venda("30.00", 5000));  // lucro 100000, tributavel 100000 - 9000
+                    Operacao.venda("1.00", 1000),
+                    Operacao.venda("30.00", 500),
+                    Operacao.venda("30.00", 5000));
 
-            assertThat(impostosComoTexto(ops)).containsExactly("0.00", "0.00", "0.00", "18200.00");
+            assertThat(impostos(ops)).containsExactly("0.00", "0.00", "0.00", "18200.00");
         }
 
         @Test
@@ -188,18 +178,14 @@ class CalculadoraDeImpostoTest {
                     Operacao.venda("20.00", 200));
 
             assertThatThrownBy(() -> calculadora.calcular(ops))
-                    .isInstanceOf(IllegalArgumentException.class);
+                    .isInstanceOf(VendaSuperaCarteiraException.class);
         }
 
         @Test
-        @DisplayName("imposto e exatamente 20% do lucro liquido")
-        void vintePorCento() {
-            var ops = List.of(
-                    Operacao.compra("10.00", 10000),
-                    Operacao.venda("45.00", 5000)); // lucro (45-10)*5000 = 175000
-
-            var impostos = calculadora.calcular(ops);
-            assertThat(impostos.get(1).valor()).isEqualByComparingTo(new BigDecimal("35000.00"));
+        @DisplayName("lista nula e rejeitada de imediato")
+        void listaNula() {
+            assertThatThrownBy(() -> calculadora.calcular(null))
+                    .isInstanceOf(NullPointerException.class);
         }
     }
 }

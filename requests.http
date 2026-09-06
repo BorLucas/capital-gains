@@ -1,4 +1,4 @@
-### Uma simulacao (lista de operacoes -> lista de impostos). Fica salva no historico.
+### Uma simulacao -> 201 Created + Location: /api/simulacoes/{id}
 POST http://localhost:8080/api/impostos/simulacao
 Content-Type: application/json
 
@@ -8,7 +8,7 @@ Content-Type: application/json
   {"operation": "sell", "unit-cost": 5.00,  "quantity": 5000}
 ]
 
-### Lote de simulacoes (varias linhas independentes)
+### Lote de simulacoes (uma lista por linha do desafio) -> 200
 POST http://localhost:8080/api/impostos/lote
 Content-Type: application/json
 
@@ -25,13 +25,22 @@ Content-Type: application/json
   ]
 ]
 
-### Historico: lista de simulacoes ja calculadas
-GET http://localhost:8080/api/simulacoes
+### Historico paginado (resumo)
+GET http://localhost:8080/api/simulacoes?page=0&size=20
 
-### Historico: detalhe de uma simulacao
+### Detalhe de uma simulacao
 GET http://localhost:8080/api/simulacoes/1
 
-### Entrada invalida (retorna 400)
+### Venda maior que a carteira -> 422 Unprocessable Entity
+POST http://localhost:8080/api/impostos/simulacao
+Content-Type: application/json
+
+[
+  {"operation": "buy",  "unit-cost": 10.00, "quantity": 100},
+  {"operation": "sell", "unit-cost": 20.00, "quantity": 200}
+]
+
+### Operacao desconhecida -> 400 Bad Request
 POST http://localhost:8080/api/impostos/simulacao
 Content-Type: application/json
 

@@ -1,5 +1,7 @@
 package com.estudos.ganhodecapital.historico;
 
+import com.estudos.ganhodecapital.domain.Operacao;
+import com.estudos.ganhodecapital.domain.ResultadoOperacao;
 import com.estudos.ganhodecapital.domain.TipoOperacao;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
@@ -37,6 +39,15 @@ public class ItemSimulacao {
         this.custoUnitario = custoUnitario;
         this.quantidade = quantidade;
         this.imposto = imposto;
+    }
+
+    static ItemSimulacao de(ResultadoOperacao resultado) {
+        Operacao operacao = resultado.operacao();
+        return new ItemSimulacao(
+                operacao.tipo(),
+                operacao.custoUnitario().valor(),
+                operacao.quantidade(),
+                resultado.imposto().emReais());
     }
 
     public TipoOperacao getTipo() {

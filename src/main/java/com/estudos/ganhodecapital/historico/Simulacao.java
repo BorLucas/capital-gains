@@ -1,5 +1,6 @@
 package com.estudos.ganhodecapital.historico;
 
+import com.estudos.ganhodecapital.domain.ResultadoOperacao;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -20,6 +21,10 @@ import java.util.List;
 /**
  * Uma simulacao ja calculada e guardada no historico: a sequencia de operacoes
  * enviada e o imposto resultante de cada uma.
+ *
+ * <p>{@code quantidadeOperacoes} e {@code impostoTotal} sao desnormalizados e
+ * calculados uma vez na criacao (a simulacao e imutavel depois de salva). Isso
+ * permite a listagem consultar so o resumo, sem carregar a colecao de itens.</p>
  */
 @Entity
 @Table(name = "simulacao")
@@ -31,6 +36,9 @@ public class Simulacao {
 
     @Column(name = "criada_em", nullable = false)
     private Instant criadaEm;
+
+    @Column(name = "quantidade_operacoes", nullable = false)
+    private int quantidadeOperacoes;
 
     @Column(name = "imposto_total", nullable = false, precision = 19, scale = 2)
     private BigDecimal impostoTotal;
@@ -44,12 +52,19 @@ public class Simulacao {
         // exigido pelo JPA
     }
 
-    public Simulacao(List<ItemSimulacao> itens) {
-        this.criadaEm = Instant.now();
+    private Simulacao(List<ItemSimulacao> itens, BigDecimal impostoTotal, Instant criadaEm) {
         this.itens = new ArrayList<>(itens);
-        this.impostoTotal = itens.stream()
-                .map(ItemSimulacao::getImposto)
+        this.quantidadeOperacoes = itens.size();
+        this.impostoTotal = impostoTotal;
+        this.criadaEm = criadaEm;
+    }
+
+    public static Simulacao de(List<ResultadoOperacao> resultados, Instant criadaEm) {
+        List<ItemSimulacao> itens = resultados.stream().map(ItemSimulacao::de).toList();
+        BigDecimal total = resultados.stream()
+                .map(r -> r.imposto().emReais())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new Simulacao(itens, total, criadaEm);
     }
 
     public Long getId() {
@@ -58,6 +73,10 @@ public class Simulacao {
 
     public Instant getCriadaEm() {
         return criadaEm;
+    }
+
+    public int getQuantidadeOperacoes() {
+        return quantidadeOperacoes;
     }
 
     public BigDecimal getImpostoTotal() {
