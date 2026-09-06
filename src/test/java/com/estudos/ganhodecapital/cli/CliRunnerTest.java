@@ -73,4 +73,10 @@ class CliRunnerTest {
         String entrada = "[{\"operation\":\"buy\", \"unit-cost\":10.00}]";
         assertThatThrownBy(() -> rodar(entrada)).isInstanceOf(OperacaoInvalidaException.class);
     }
+
+    @Test
+    void custoUnitarioComMaisDeDuasCasasDecimaisEhRejeitado() {
+        String entrada = "[{\"operation\":\"buy\", \"unit-cost\":10.005, \"quantity\": 100}]";
+        assertThatThrownBy(() -> rodar(entrada)).isInstanceOf(OperacaoInvalidaException.class);
+    }
 }

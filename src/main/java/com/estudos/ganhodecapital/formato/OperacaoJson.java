@@ -5,6 +5,7 @@ import com.estudos.ganhodecapital.domain.Operacao;
 import com.estudos.ganhodecapital.domain.TipoOperacao;
 import com.estudos.ganhodecapital.domain.erro.OperacaoInvalidaException;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -29,6 +30,7 @@ public record OperacaoJson(
 
         @NotNull(message = "unit-cost e obrigatorio")
         @PositiveOrZero(message = "unit-cost nao pode ser negativo")
+        @Digits(integer = 15, fraction = 2, message = "unit-cost deve ter no maximo 2 casas decimais")
         @JsonProperty("unit-cost")
         BigDecimal unitCost,
 
@@ -43,6 +45,9 @@ public record OperacaoJson(
         }
         if (quantity == null) {
             throw new OperacaoInvalidaException("quantity e obrigatorio");
+        }
+        if (unitCost.stripTrailingZeros().scale() > Dinheiro.ESCALA) {
+            throw new OperacaoInvalidaException("unit-cost deve ter no maximo 2 casas decimais");
         }
         TipoOperacao tipo = TipoOperacao.doCodigo(operation);
         return new Operacao(tipo, Dinheiro.de(unitCost), quantity);
