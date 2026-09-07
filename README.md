@@ -27,7 +27,7 @@ or `FAILED` (with a reason). See [`docs/async-orders.md`](docs/async-orders.md).
 ## How to run
 
 ```bash
-mvn test                 # 42 tests
+mvn test                 # 46 tests
 mvn spring-boot:run      # starts the API on port 8080
 mvn -DskipTests package  # builds the jar
 ```

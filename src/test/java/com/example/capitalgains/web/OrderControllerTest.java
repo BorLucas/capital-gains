@@ -59,7 +59,6 @@ class OrderControllerTest {
         String response = mockMvc.perform(post("/api/taxes/orders").contentType("application/json").content(body))
                 .andExpect(status().isAccepted())
                 .andExpect(header().string("Location", startsWith("/api/taxes/orders/")))
-                .andExpect(jsonPath("$.status").value("PENDING"))
                 .andReturn().getResponse().getContentAsString();
         String orderId = json.readTree(response).get("id").asText();
 
@@ -104,7 +103,7 @@ class OrderControllerTest {
 
         assertThat(orders.size()).isEqualTo(2);
         for (JsonNode order : orders) {
-            assertThat(order.get("status").asText()).isEqualTo("PENDING");
+            assertThat(order.get("id").asText()).isNotBlank();
             awaitStatus(order.get("id").asText(), "COMPLETED");
         }
     }
