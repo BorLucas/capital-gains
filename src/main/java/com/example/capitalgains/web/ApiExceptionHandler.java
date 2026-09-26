@@ -1,5 +1,8 @@
 package com.example.capitalgains.web;
 
+import com.example.capitalgains.application.InvalidCredentialsException;
+import com.example.capitalgains.application.NotAuthenticatedException;
+import com.example.capitalgains.application.UsernameTakenException;
 import com.example.capitalgains.domain.error.CapitalGainsException;
 import com.example.capitalgains.domain.error.InvalidTradeException;
 import com.example.capitalgains.domain.error.SellExceedsPortfolioException;
@@ -30,6 +33,16 @@ public class ApiExceptionHandler {
     @ExceptionHandler({SimulationNotFoundException.class, OrderNotFoundException.class})
     public ProblemDetail notFound(RuntimeException ex) {
         return problem(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    @ExceptionHandler({NotAuthenticatedException.class, InvalidCredentialsException.class})
+    public ProblemDetail unauthorized(RuntimeException ex) {
+        return problem(HttpStatus.UNAUTHORIZED, ex.getMessage());
+    }
+
+    @ExceptionHandler(UsernameTakenException.class)
+    public ProblemDetail conflict(UsernameTakenException ex) {
+        return problem(HttpStatus.CONFLICT, ex.getMessage());
     }
 
     @ExceptionHandler(SellExceedsPortfolioException.class)

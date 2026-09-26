@@ -68,14 +68,14 @@ public final class Portfolio {
     }
 
     private Tax sell(Trade sell) {
-        Money result = sell.unitCost().minus(averagePrice).times(sell.quantity());
+        Money result = resultOf(sell);
         reducePosition(sell.quantity());
 
         if (result.isNegative()) {
             accumulatedLoss = accumulatedLoss.plus(result.abs());
             return Tax.zero();
         }
-        if (sell.totalValue().isLessThanOrEqualTo(EXEMPTION_LIMIT)) {
+        if (isExempt(sell)) {
             return Tax.zero();
         }
 
@@ -87,6 +87,16 @@ public final class Portfolio {
 
         accumulatedLoss = Money.ZERO;
         return Tax.of(taxableProfit.applyRate(TAX_RATE));
+    }
+
+    /** Gross result of a sell against the current average price; negative is a loss. */
+    public Money resultOf(Trade sell) {
+        return sell.unitCost().minus(averagePrice).times(sell.quantity());
+    }
+
+    /** A sell whose total value is within the exemption limit pays no tax on its profit. */
+    public static boolean isExempt(Trade sell) {
+        return sell.totalValue().isLessThanOrEqualTo(EXEMPTION_LIMIT);
     }
 
     private void reducePosition(long quantitySold) {

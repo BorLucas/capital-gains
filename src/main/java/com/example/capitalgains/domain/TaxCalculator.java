@@ -29,4 +29,33 @@ public class TaxCalculator {
                 })
                 .toList();
     }
+
+    /**
+     * Same walk as {@link #calculate(List)}, but reports the full state around
+     * each trade (average price, result, exemption, loss carried forward).
+     */
+    public List<TradeBreakdown> breakdown(List<Trade> trades) {
+        Objects.requireNonNull(trades, "trades");
+
+        Portfolio portfolio = new Portfolio();
+        return trades.stream()
+                .map(trade -> {
+                    Objects.requireNonNull(trade, "trade");
+                    Money averageBefore = portfolio.averagePrice();
+                    Money lossBefore = portfolio.accumulatedLoss();
+                    Money result = trade.isSell() ? portfolio.resultOf(trade) : Money.ZERO;
+                    Tax tax = portfolio.apply(TradeEvent.of(trade));
+                    return new TradeBreakdown(
+                            trade,
+                            averageBefore,
+                            result,
+                            trade.isSell() && Portfolio.isExempt(trade),
+                            tax,
+                            portfolio.quantity(),
+                            portfolio.averagePrice(),
+                            lossBefore,
+                            portfolio.accumulatedLoss());
+                })
+                .toList();
+    }
 }

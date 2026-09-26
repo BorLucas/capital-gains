@@ -8,6 +8,7 @@ Three ways to use it:
 
 | Way | For what |
 |-----|----------|
+| **Broker UI** (`/`) | log in, buy and sell tickers, and see average price, profit, exemption and tax on every sale |
 | **REST API** | main use; submit an order, poll it until assessed, read the stored result |
 | **Swagger UI** (`/swagger-ui.html`) | try the API from the browser |
 | **CLI** (`--spring.profiles.active=cli`) | the challenge's original format: reads JSON from stdin, synchronous |
@@ -46,7 +47,7 @@ java -jar target/capital-gains-0.0.1-SNAPSHOT.jar --spring.profiles.active=cli <
 ### Docker
 
 ```bash
-docker compose up --build        # API on port 8080, capped at 256 MB / 1 CPU
+docker compose up --build        # UI + API on port 8080, capped at 256 MB / 1 CPU; data kept in a volume
 docker build -t capital-gains .
 docker run -i --rm capital-gains --spring.profiles.active=cli < examples/input.txt
 ```
@@ -60,6 +61,21 @@ docker run -i --rm capital-gains --spring.profiles.active=cli < examples/input.t
 | `GET`  | `/api/taxes/orders/{id}` | poll one order (`PENDING` → `PROCESSING` → `COMPLETED`/`FAILED`) |
 | `GET`  | `/api/simulations?page=&size=` | paginated history (summary) |
 | `GET`  | `/api/simulations/{id}` | detail: each trade and the tax it generated |
+
+### Broker (session login)
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `POST` | `/api/auth/register` | create an account (password: 6+ characters, no other rule) and log in · **201** |
+| `POST` | `/api/auth/login` / `/api/auth/logout` | start / end the session (`JSESSIONID` cookie) |
+| `GET`  | `/api/auth/me` | the logged-in user · **401** without a session |
+| `GET`  | `/api/broker/account` | totals, positions per ticker, trade log with the full tax breakdown |
+| `POST` | `/api/broker/quote` | preview a trade (result, exemption, tax) without executing it |
+| `POST` | `/api/broker/trades` | execute a trade · **201**, **422** when selling more than held |
+
+Each ticker is its own position (average price and loss carried forward).
+Only the raw trades are stored; results and taxes are replayed through the same
+`TaxCalculator`, so the broker and the challenge API can never disagree.
 
 **1. Submit** `POST /api/taxes/orders`
 
@@ -143,7 +159,8 @@ in
   that makes cases 6 and 9 pass together.
 - `Money` centralizes the rounding rule (2 decimal places, `HALF_UP`) and
   rejects input with more precision at the edge.
-- History in **in-memory** H2: gone when the application stops.
+- **In-memory** H2 by default (`mvn spring-boot:run`, tests): gone when the application stops.
+  `docker compose` switches it to a file on a volume, so broker users and trades persist.
 - `totalTax` and `tradeCount` are denormalized on `Simulation` (immutable once
   created), so the listing does not load the collection of items.
 - The async queue is the `simulation_order` **table itself** (outbox pattern),

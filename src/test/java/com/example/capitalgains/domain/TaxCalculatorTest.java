@@ -188,4 +188,58 @@ class TaxCalculatorTest {
                     .isInstanceOf(NullPointerException.class);
         }
     }
+
+    @Nested
+    @DisplayName("Breakdown")
+    class Breakdown {
+
+        @Test
+        @DisplayName("an exempt profitable sell reports the profit and no tax")
+        void exemptSell() {
+            var sell = calculator.breakdown(List.of(
+                    Trade.buy("10.00", 10),
+                    Trade.sell("50.00", 5))).get(1);
+
+            assertThat(sell.averagePriceBefore()).isEqualTo(Money.of("10.00"));
+            assertThat(sell.result()).isEqualTo(Money.of("200.00"));
+            assertThat(sell.exempt()).isTrue();
+            assertThat(sell.tax()).isEqualTo(Tax.zero());
+            assertThat(sell.netResult()).isEqualTo(Money.of("200.00"));
+            assertThat(sell.positionAfter()).isEqualTo(5);
+            assertThat(sell.averagePriceAfter()).isEqualTo(Money.of("10.00"));
+        }
+
+        @Test
+        @DisplayName("a taxed sell shows the loss it offset (official case 3)")
+        void taxedSellOffsetsLoss() {
+            var walk = calculator.breakdown(List.of(
+                    Trade.buy("10.00", 10000),
+                    Trade.sell("5.00", 5000),
+                    Trade.sell("20.00", 3000)));
+
+            assertThat(walk.get(1).result()).isEqualTo(Money.of("-25000.00"));
+            assertThat(walk.get(1).accumulatedLossAfter()).isEqualTo(Money.of("25000.00"));
+
+            var taxed = walk.get(2);
+            assertThat(taxed.exempt()).isFalse();
+            assertThat(taxed.result()).isEqualTo(Money.of("30000.00"));
+            assertThat(taxed.accumulatedLossBefore()).isEqualTo(Money.of("25000.00"));
+            assertThat(taxed.accumulatedLossAfter()).isEqualTo(Money.ZERO);
+            assertThat(taxed.tax().amount()).isEqualTo(Money.of("1000.00"));
+            assertThat(taxed.netResult()).isEqualTo(Money.of("29000.00"));
+        }
+
+        @Test
+        @DisplayName("reports the same taxes as calculate")
+        void agreesWithCalculate() {
+            var ops = List.of(
+                    Trade.buy("10.00", 10000),
+                    Trade.sell("1.00", 1000),
+                    Trade.sell("30.00", 500),
+                    Trade.sell("30.00", 5000));
+
+            assertThat(calculator.breakdown(ops).stream().map(b -> b.tax().toBigDecimal().toPlainString()))
+                    .containsExactlyElementsOf(taxes(ops));
+        }
+    }
 }
