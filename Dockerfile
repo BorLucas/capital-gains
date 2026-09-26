@@ -1,10 +1,10 @@
-# Build stage: tests already run in CI, so the image build only packages
+# Build stage: compiles and runs the full test suite; a failing test fails the image build
 FROM maven:3.9-eclipse-temurin-21-alpine AS build
 WORKDIR /src
 COPY pom.xml .
 RUN mvn -B -q dependency:go-offline
 COPY src src
-RUN mvn -B -q -DskipTests package
+RUN mvn -B verify
 
 # Runtime stage: JRE only, no Maven, no JDK, no sources
 FROM eclipse-temurin:21-jre-alpine
