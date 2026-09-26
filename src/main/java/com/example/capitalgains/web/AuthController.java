@@ -3,6 +3,7 @@ package com.example.capitalgains.web;
 import com.example.capitalgains.application.AuthService;
 import com.example.capitalgains.application.NotAuthenticatedException;
 import com.example.capitalgains.application.UserView;
+import com.example.capitalgains.broker.Role;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -58,7 +59,8 @@ public class AuthController {
     }
 
     /** Who is logged in, and the state of this session: what "validate my login" shows. */
-    public record Me(Long id, String username, Instant memberSince, Instant loggedInAt, long idleTimeoutSeconds) {
+    public record Me(Long id, String username, Role role, Instant memberSince, Instant loggedInAt,
+                     long idleTimeoutSeconds) {
     }
 
     private final AuthService auth;
@@ -70,7 +72,7 @@ public class AuthController {
     }
 
     @PostMapping(path = "/register", consumes = MediaType.APPLICATION_JSON_VALUE)
-    @Operation(summary = "Creates an account and logs it in")
+    @Operation(summary = "Creates a USER account and logs it in (admins are created by an admin)")
     public ResponseEntity<UserView> register(@RequestBody @Valid SignUp body, HttpServletRequest request) {
         UserView user = auth.register(body.username(), body.password());
         Sessions.start(request, user.id(), Instant.now(clock));
@@ -99,7 +101,7 @@ public class AuthController {
     @Operation(summary = "The logged-in user and session; 401 when there is no session")
     public Me me(HttpSession session) {
         UserView user = auth.find(Sessions.userId(session)).orElseThrow(NotAuthenticatedException::new);
-        return new Me(user.id(), user.username(), user.memberSince(),
+        return new Me(user.id(), user.username(), user.role(), user.memberSince(),
                 Sessions.loggedInAt(session), session.getMaxInactiveInterval());
     }
 

@@ -13,13 +13,16 @@ import java.util.Objects;
  * @param quantity number of shares traded (&gt; 0)
  * @param fee      brokerage fee charged for the whole order (&gt;= 0); the
  *                 challenge format has none, so it defaults to zero
+ * @param rules    tax regime in force when the trade was made (only a sell uses
+ *                 it); defaults to the challenge's {@link TaxRules#CHALLENGE}
  */
-public record Trade(TradeType type, Money unitCost, long quantity, Money fee) {
+public record Trade(TradeType type, Money unitCost, long quantity, Money fee, TaxRules rules) {
 
     public Trade {
         Objects.requireNonNull(type, "type");
         Objects.requireNonNull(unitCost, "unitCost");
         Objects.requireNonNull(fee, "fee");
+        Objects.requireNonNull(rules, "rules");
         if (fee.isNegative()) {
             throw new InvalidTradeException("fee cannot be negative");
         }
@@ -31,13 +34,17 @@ public record Trade(TradeType type, Money unitCost, long quantity, Money fee) {
         }
     }
 
-    /** A trade with no brokerage fee (the challenge format). */
+    /** A trade in the challenge format: no brokerage fee, the challenge's tax rules. */
     public Trade(TradeType type, Money unitCost, long quantity) {
-        this(type, unitCost, quantity, Money.ZERO);
+        this(type, unitCost, quantity, Money.ZERO, TaxRules.CHALLENGE);
     }
 
     public Trade withFee(Money fee) {
-        return new Trade(type, unitCost, quantity, fee);
+        return new Trade(type, unitCost, quantity, fee, rules);
+    }
+
+    public Trade withRules(TaxRules rules) {
+        return new Trade(type, unitCost, quantity, fee, rules);
     }
 
     public static Trade buy(String unitCost, long quantity) {

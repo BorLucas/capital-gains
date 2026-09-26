@@ -66,20 +66,42 @@ docker run -i --rm capital-gains --spring.profiles.active=cli < examples/input.t
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| `POST` | `/api/auth/register` | create an account (password: 6+ characters, no other rule) and log in · **201** |
+| `POST` | `/api/auth/register` | create a **USER** account (password: 6+ characters, no other rule) and log in · **201** |
 | `POST` | `/api/auth/login` / `/api/auth/logout` | start / end the session (`JSESSIONID` cookie) |
-| `GET`  | `/api/auth/me` | the logged-in user and session info (login time, idle timeout) · **401** without a session |
+| `GET`  | `/api/auth/me` | the logged-in user, role and session info (login time, idle timeout) · **401** without a session |
 | `POST` | `/api/auth/password` | change the password; needs the current one (**400** if wrong) |
-| `GET` / `PUT` | `/api/broker/settings` | brokerage fee per order (default 5.00) |
+| `GET`  | `/api/broker/tickers` | listed tickers open for buying, with a reference price |
+| `GET`  | `/api/broker/rules` | the fee schedule and tax rules new orders are placed under |
 | `GET`  | `/api/broker/account` | totals, positions per ticker, trade log with the full tax breakdown |
 | `POST` | `/api/broker/quote` | preview a trade (result, exemption, tax) without executing it |
-| `POST` | `/api/broker/trades` | execute a trade · **201**, **422** when selling more than held |
+| `POST` | `/api/broker/trades` | execute a trade · **201**, **422** when selling more than held or the ticker is not tradable |
+
+### Admin (role ADMIN · **403** otherwise)
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `GET` / `POST` | `/api/admin/users` | list users / create one with a role · **409** if the username is taken |
+| `PUT`  | `/api/admin/users/{id}/role` | change a user's role · **409** for your own |
+| `GET` / `POST` | `/api/admin/tickers` | whole catalog / list a new ticker · **409** if it exists |
+| `PUT`  | `/api/admin/tickers/{symbol}` | edit name and reference price; `active: false` delists (holders can still sell) |
+| `GET` / `PUT` | `/api/admin/rules` | fee type (`FIXED` $ per order or `PERCENT` of the order value), fee, tax rate %, exemption limit |
+
+**Roles.** A `USER` trades and manages only their own account (theme, password).
+An `ADMIN` also manages users and roles, the ticker catalog, and the broker-wide
+fees and tax rules. The role is read from the database on every call, so a change
+takes effect immediately. An admin cannot change their own role, which keeps at
+least one admin around. The **first admin** is created on startup from
+`broker.admin.username` / `broker.admin.password` (env `BROKER_ADMIN_USERNAME` /
+`BROKER_ADMIN_PASSWORD`); with no password set, a random one is generated and
+printed once in the log.
 
 Each ticker is its own position (average price and loss carried forward).
-A **brokerage fee** (per order, set in Settings) is charged on every buy and sell:
-it adds to a buy's cost, so it raises the average price, and it comes out of a
-sale's proceeds, so it lowers the taxable profit. The $20,000 exemption looks at
-the gross sale value. Each trade stores the fee it was charged.
+A **brokerage fee** (set by an admin: fixed per order or a % of the order value)
+is charged on every buy and sell: it adds to a buy's cost, so it raises the
+average price, and it comes out of a sale's proceeds, so it lowers the taxable
+profit. The exemption looks at the gross sale value. Each trade stores the fee
+and the tax rules it was placed under, so an admin changing them never rewrites
+history. The challenge API and the CLI always use the challenge's rules.
 Only the raw trades are stored; results and taxes are replayed through the same
 `TaxCalculator`, so the broker and the challenge API can never disagree.
 

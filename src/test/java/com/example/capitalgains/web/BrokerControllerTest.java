@@ -1,5 +1,13 @@
 package com.example.capitalgains.web;
 
+import com.example.capitalgains.broker.BrokerConfig;
+import com.example.capitalgains.broker.BrokerConfigRepository;
+import com.example.capitalgains.broker.Ticker;
+import com.example.capitalgains.broker.TickerRepository;
+import com.example.capitalgains.domain.FeeSchedule;
+import com.example.capitalgains.domain.Money;
+import com.example.capitalgains.domain.TaxRules;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -8,11 +16,11 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -22,6 +30,12 @@ class BrokerControllerTest {
 
     @Autowired
     MockMvc mockMvc;
+
+    @Autowired
+    BrokerConfigRepository config;
+
+    @Autowired
+    TickerRepository tickers;
 
     /** The context (and its database) is shared across test classes, so every test gets its own user. */
     private static String newUsername() {
@@ -46,10 +60,16 @@ class BrokerControllerTest {
                 .andReturn().getRequest().getSession(false);
     }
 
-    private void setFee(MockHttpSession session, String fee) throws Exception {
-        mockMvc.perform(put("/api/broker/settings").session(session)
-                        .contentType("application/json").content("{\"brokerageFee\":" + fee + "}"))
-                .andExpect(status().isOk());
+    /** Fees and rules are broker-wide (admin-owned): tests set them directly and put the defaults back after. */
+    private void useRules(FeeSchedule fees, TaxRules rules) {
+        BrokerConfig current = config.findById(BrokerConfig.ID).orElseThrow();
+        current.apply(fees, rules);
+        config.save(current);
+    }
+
+    @AfterEach
+    void restoreDefaultRules() {
+        useRules(FeeSchedule.fixed("5.00"), TaxRules.CHALLENGE);
     }
 
     private ResultActions place(MockHttpSession session, String body) throws Exception {
@@ -93,7 +113,7 @@ class BrokerControllerTest {
     @Test
     void aSellAboveTheExemptionIsTaxedAndTickersAreIndependent() throws Exception {
         MockHttpSession session = register(newUsername());
-        setFee(session, "0"); // isolate the tax rule (official case 2)
+        useRules(FeeSchedule.fixed("0"), TaxRules.CHALLENGE); // isolate the tax rule (official case 2)
         place(session, trade("VALE3", "buy", "10.00", 10000));
         place(session, trade("ITUB4", "buy", "99.00", 1));
 
@@ -189,22 +209,45 @@ class BrokerControllerTest {
     }
 
     @Test
-    void theFeeSettingAppliesToNewOrdersOnly() throws Exception {
+    void newRulesApplyToNewOrdersOnly() throws Exception {
         MockHttpSession session = register(newUsername());
-        mockMvc.perform(get("/api/broker/settings").session(session))
-                .andExpect(jsonPath("$.brokerageFee").value(5.00));
+        mockMvc.perform(get("/api/broker/rules").session(session))
+                .andExpect(jsonPath("$.feeType").value("FIXED"))
+                .andExpect(jsonPath("$.feeValue").value(5))
+                .andExpect(jsonPath("$.taxRatePercent").value(20))
+                .andExpect(jsonPath("$.exemptionLimit").value(20000.00));
 
         place(session, trade("ABEV3", "buy", "12.00", 10)).andExpect(jsonPath("$.fee").value(5.00));
-        setFee(session, "2.50");
-        place(session, trade("ABEV3", "buy", "12.00", 10)).andExpect(jsonPath("$.fee").value(2.50));
+        useRules(FeeSchedule.percent("1"), new TaxRules(new BigDecimal("0.15"), Money.ZERO));
+        // 1% of 120.00
+        place(session, trade("ABEV3", "buy", "12.00", 10)).andExpect(jsonPath("$.fee").value(1.20));
+        // 15%, no exemption: sold 5 x 20.00 = 100.00 - 1.00 fee = 99.00; avg (125.00 + 121.20) / 20 = 12.31
+        // result 99.00 - 61.55 = 37.45 -> tax 5.62 (5.6175 rounded)
+        place(session, trade("ABEV3", "sell", "20.00", 5))
+                .andExpect(jsonPath("$.exempt").value(false))
+                .andExpect(jsonPath("$.result").value(37.45))
+                .andExpect(jsonPath("$.tax").value(5.62));
 
         mockMvc.perform(get("/api/broker/account").session(session))
-                .andExpect(jsonPath("$.trades[0].fee").value(2.50))
-                .andExpect(jsonPath("$.trades[1].fee").value(5.00));
+                .andExpect(jsonPath("$.trades[0].taxRatePercent").value(15))
+                .andExpect(jsonPath("$.trades[2].fee").value(5.00))
+                .andExpect(jsonPath("$.trades[2].taxRatePercent").value(20));
+    }
 
-        mockMvc.perform(put("/api/broker/settings").session(session)
-                        .contentType("application/json").content("{\"brokerageFee\":-1}"))
-                .andExpect(status().isBadRequest());
+    @Test
+    void onlyListedTickersTradeAndADelistedOneCanOnlyBeSold() throws Exception {
+        MockHttpSession session = register(newUsername());
+        place(session, trade("NOPE9", "buy", "1.00", 1)).andExpect(status().isUnprocessableEntity());
+
+        String symbol = "T" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+        tickers.save(new Ticker(symbol, "Test Co", new BigDecimal("10.00")));
+        place(session, trade(symbol, "buy", "10.00", 10)).andExpect(status().isCreated());
+
+        Ticker listed = tickers.findById(symbol).orElseThrow();
+        listed.update("Test Co", new BigDecimal("10.00"), false);
+        tickers.save(listed);
+        place(session, trade(symbol, "buy", "10.00", 1)).andExpect(status().isUnprocessableEntity());
+        place(session, trade(symbol, "sell", "10.00", 10)).andExpect(status().isCreated());
     }
 
     @Test

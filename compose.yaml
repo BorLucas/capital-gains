@@ -10,6 +10,10 @@ services:
       # File-based H2 on a volume: broker users and trades survive restarts
       SPRING_DATASOURCE_URL: jdbc:h2:file:/data/capitalgains
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      # First admin, created only if no admin exists. With no password set, a random
+      # one is generated and printed once in the logs (docker compose logs api).
+      BROKER_ADMIN_USERNAME: admin
+      BROKER_ADMIN_PASSWORD: ${BROKER_ADMIN_PASSWORD:-}
     volumes:
       - data:/data
 

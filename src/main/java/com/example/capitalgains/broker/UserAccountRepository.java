@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UserAccountRepository extends JpaRepository<UserAccount, Long> {
@@ -12,6 +13,10 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
     Optional<UserAccount> findByUsername(String username);
 
     boolean existsByUsername(String username);
+
+    boolean existsByRole(Role role);
+
+    List<UserAccount> findAllByOrderByUsernameAsc();
 
     /**
      * Locks the user's row for the rest of the transaction, so two concurrent

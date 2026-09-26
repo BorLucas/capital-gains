@@ -5,7 +5,6 @@ import com.example.capitalgains.domain.Tax;
 import com.example.capitalgains.domain.Trade;
 import com.example.capitalgains.domain.error.SellExceedsPortfolioException;
 
-import java.math.BigDecimal;
 
 /**
  * Aggregate that evolves as trades are applied to it. Modeled as a small state
@@ -17,20 +16,19 @@ import java.math.BigDecimal;
  * and is not thread-safe.</p>
  *
  * <p>A buy's fee is part of its cost, so it raises the average price. Rules
- * applied on sell transitions:</p>
+ * applied on sell transitions, with the rate and exemption limit taken from the
+ * sell's {@link com.example.capitalgains.domain.TaxRules} (the challenge's are
+ * 20% and 20,000):</p>
  * <ol>
  *   <li>result = (sell total - fee) - average price x quantity;</li>
  *   <li>a loss (result &lt; 0) is always accumulated, even on an exempt sell;</li>
- *   <li>an exempt sell (gross total value &le; 20,000, before the fee) pays no tax, and an exempt
- *       profit does not consume the accumulated loss;</li>
- *   <li>outside the exemption, the profit offsets the accumulated loss and 20%
- *       of what remains becomes tax.</li>
+ *   <li>an exempt sell (gross value &le; the exemption limit, before the fee)
+ *       pays no tax, and an exempt profit does not consume the accumulated loss;</li>
+ *   <li>outside the exemption, the profit offsets the accumulated loss and the
+ *       tax rate applies to what remains.</li>
  * </ol>
  */
 public final class Portfolio {
-
-    private static final BigDecimal TAX_RATE = new BigDecimal("0.20");
-    private static final Money EXEMPTION_LIMIT = Money.of("20000");
 
     private PortfolioState state = PortfolioState.EMPTY;
     private Money averagePrice = Money.ZERO;
@@ -87,7 +85,7 @@ public final class Portfolio {
         }
 
         accumulatedLoss = Money.ZERO;
-        return Tax.of(taxableProfit.applyRate(TAX_RATE));
+        return Tax.of(taxableProfit.applyRate(sell.rules().rate()));
     }
 
     /** Result of a sell net of its fee, against the current average price; negative is a loss. */
@@ -95,9 +93,9 @@ public final class Portfolio {
         return sell.netValue().minus(averagePrice.times(sell.quantity()));
     }
 
-    /** A sell whose total value is within the exemption limit pays no tax on its profit. */
+    /** A sell whose gross value is within its rules' exemption limit pays no tax on its profit. */
     public static boolean isExempt(Trade sell) {
-        return sell.totalValue().isLessThanOrEqualTo(EXEMPTION_LIMIT);
+        return sell.totalValue().isLessThanOrEqualTo(sell.rules().exemptionLimit());
     }
 
     private void reducePosition(long quantitySold) {

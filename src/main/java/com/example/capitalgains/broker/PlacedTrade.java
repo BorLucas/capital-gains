@@ -1,6 +1,7 @@
 package com.example.capitalgains.broker;
 
 import com.example.capitalgains.domain.Money;
+import com.example.capitalgains.domain.TaxRules;
 import com.example.capitalgains.domain.Trade;
 import com.example.capitalgains.domain.TradeType;
 import jakarta.persistence.Column;
@@ -18,7 +19,8 @@ import java.time.Instant;
 
 /**
  * A buy or sell a user executed on the broker, with the brokerage fee charged
- * at the time (a later change of the fee setting does not rewrite history).
+ * and the tax rules in force at the time: a later change of the broker's fees or
+ * rules never rewrites history.
  * The tax is not stored: it is
  * recomputed by replaying the user's trades for the ticker, so the rules stay
  * in one place (the domain).
@@ -51,6 +53,13 @@ public class PlacedTrade {
     @Column(precision = 19, scale = 2)
     private BigDecimal fee;
 
+    /** Tax regime in force when the trade was made; null (older rows) means the challenge's. */
+    @Column(name = "tax_rate", precision = 5, scale = 4)
+    private BigDecimal taxRate;
+
+    @Column(name = "exemption_limit", precision = 19, scale = 2)
+    private BigDecimal exemptionLimit;
+
     @Column(name = "executed_at", nullable = false)
     private Instant executedAt;
 
@@ -65,6 +74,8 @@ public class PlacedTrade {
         this.unitCost = trade.unitCost().amount();
         this.quantity = trade.quantity();
         this.fee = trade.fee().amount();
+        this.taxRate = trade.rules().rate();
+        this.exemptionLimit = trade.rules().exemptionLimit().amount();
         this.executedAt = executedAt;
     }
 
@@ -73,7 +84,10 @@ public class PlacedTrade {
     }
 
     public Trade toDomain() {
-        return new Trade(type, Money.of(unitCost), quantity, fee == null ? Money.ZERO : Money.of(fee));
+        TaxRules rules = taxRate == null || exemptionLimit == null
+                ? TaxRules.CHALLENGE
+                : new TaxRules(taxRate, Money.of(exemptionLimit));
+        return new Trade(type, Money.of(unitCost), quantity, fee == null ? Money.ZERO : Money.of(fee), rules);
     }
 
     public Long getId() {

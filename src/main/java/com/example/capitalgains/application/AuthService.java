@@ -1,5 +1,6 @@
 package com.example.capitalgains.application;
 
+import com.example.capitalgains.broker.Role;
 import com.example.capitalgains.broker.UserAccount;
 import com.example.capitalgains.broker.UserAccountRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -28,15 +29,21 @@ public class AuthService {
         this.clock = clock;
     }
 
+    /** Public sign-up: always a plain USER. */
     @Transactional
     public UserView register(String username, String password) {
+        return register(username, password, Role.USER);
+    }
+
+    @Transactional
+    public UserView register(String username, String password, Role role) {
         String normalized = normalize(username);
         if (users.existsByUsername(normalized)) {
             throw new UsernameTakenException(normalized);
         }
         try {
             UserAccount account = users.saveAndFlush(
-                    new UserAccount(normalized, hasher.hash(password), Instant.now(clock)));
+                    new UserAccount(normalized, hasher.hash(password), role, Instant.now(clock)));
             return UserView.of(account);
         } catch (DataIntegrityViolationException raced) {
             // two sign-ups for the same name at once: the unique constraint decides
