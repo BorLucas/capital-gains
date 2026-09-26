@@ -61,7 +61,7 @@ Layers, innermost first. Dependencies point inward only (ArchUnit-checked).
 ```
 domain/            pure Java core — the tax rules
   Money            money value object: 2dp, HALF_UP, centralizes rounding
-  Trade            one buy/sell (type, unitCost: Money, quantity)
+  Trade            one buy/sell (type, unitCost: Money, quantity, fee: Money = 0)
   Tax, TradeResult, TradeType
   TaxCalculator    walks a List<Trade>, returns List<TradeResult>; breakdown() adds
                    the full walk (avg price, result, exemption, loss) per trade
@@ -103,6 +103,10 @@ Encoded in `Portfolio` (a small explicit state machine) and validated by
   the one non-obvious modeling call — it is the only reading that makes official
   cases 6 and 9 both pass. Do not "fix" it.)
 - Selling more than the position throws `SellExceedsPortfolioException`.
+- **Brokerage fee** (`Trade.fee`, zero in the challenge format): a buy's fee is
+  part of its cost (`netValue`), so it enters the average price; a sell's fee
+  comes out of the proceeds before the result. The exemption still uses the
+  **gross** sale value (`totalValue`). The 9 official cases have no fee.
 
 `Portfolio` states: `EMPTY` <-> `HOLDING`. `apply(TradeEvent)` validates the
 transition (guard) before running the action. Full write-up:
@@ -160,6 +164,11 @@ One self-contained file, vanilla JS, no framework, no Node build — keep it tha
   (`application/PasswordHasher`) — no Spring Security. The only password rule
   is length >= 6, by product decision (`123456` is allowed). Usernames are
   case-insensitive (stored lowercase).
+- **Settings** (gear button, native `<dialog>`): theme (System/Light/Dark, kept in
+  `localStorage`, applied before first paint), brokerage fee per order
+  (`UserAccount.brokerageFee`, default 5.00, applied server-side — the client
+  never sends a fee), account + session info with "Verify login" (`/api/auth/me`),
+  and password change (needs the current password).
 - **Tax** is never stored. `BrokerService` replays the user's trades for a
   ticker through `TaxCalculator.breakdown` on every quote, trade and account
   read. Each ticker is an independent `Portfolio`.

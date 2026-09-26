@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
@@ -16,6 +17,8 @@ import java.time.Instant;
 @Entity
 @Table(name = "app_user")
 public class UserAccount {
+
+    public static final BigDecimal DEFAULT_BROKERAGE_FEE = new BigDecimal("5.00");
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -29,6 +32,10 @@ public class UserAccount {
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+
+    /** Brokerage fee charged per order; null means the default. */
+    @Column(name = "brokerage_fee", precision = 19, scale = 2)
+    private BigDecimal brokerageFee;
 
     protected UserAccount() {
         // required by JPA
@@ -54,5 +61,17 @@ public class UserAccount {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public BigDecimal getBrokerageFee() {
+        return brokerageFee == null ? DEFAULT_BROKERAGE_FEE : brokerageFee;
+    }
+
+    public void setBrokerageFee(BigDecimal brokerageFee) {
+        this.brokerageFee = brokerageFee;
+    }
+
+    public void changePasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
     }
 }

@@ -20,6 +20,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Clock;
+import java.time.Instant;
+
 /**
  * Sign-up, login and logout over the servlet container's own HTTP session: the
  * browser holds only the {@code JSESSIONID} cookie (HttpOnly, SameSite=Strict).
@@ -45,17 +48,32 @@ public class AuthController {
     public record Login(String username, String password) {
     }
 
-    private final AuthService auth;
+    public record PasswordChange(
+            @NotBlank(message = "current password is required")
+            String currentPassword,
 
-    public AuthController(AuthService auth) {
+            @NotBlank(message = "new password is required")
+            @Size(min = 6, max = 128, message = "password must have at least 6 characters")
+            String newPassword) {
+    }
+
+    /** Who is logged in, and the state of this session: what "validate my login" shows. */
+    public record Me(Long id, String username, Instant memberSince, Instant loggedInAt, long idleTimeoutSeconds) {
+    }
+
+    private final AuthService auth;
+    private final Clock clock;
+
+    public AuthController(AuthService auth, Clock clock) {
         this.auth = auth;
+        this.clock = clock;
     }
 
     @PostMapping(path = "/register", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Creates an account and logs it in")
     public ResponseEntity<UserView> register(@RequestBody @Valid SignUp body, HttpServletRequest request) {
         UserView user = auth.register(body.username(), body.password());
-        Sessions.start(request, user.id());
+        Sessions.start(request, user.id(), Instant.now(clock));
         return ResponseEntity.status(HttpStatus.CREATED).body(user);
     }
 
@@ -63,7 +81,7 @@ public class AuthController {
     @Operation(summary = "Logs in; 401 on a wrong username or password")
     public UserView login(@RequestBody Login body, HttpServletRequest request) {
         UserView user = auth.login(body.username(), body.password() == null ? "" : body.password());
-        Sessions.start(request, user.id());
+        Sessions.start(request, user.id(), Instant.now(clock));
         return user;
     }
 
@@ -78,8 +96,19 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    @Operation(summary = "The logged-in user; 401 when there is no session")
-    public UserView me(HttpSession session) {
-        return auth.find(Sessions.userId(session)).orElseThrow(NotAuthenticatedException::new);
+    @Operation(summary = "The logged-in user and session; 401 when there is no session")
+    public Me me(HttpSession session) {
+        UserView user = auth.find(Sessions.userId(session)).orElseThrow(NotAuthenticatedException::new);
+        return new Me(user.id(), user.username(), user.memberSince(),
+                Sessions.loggedInAt(session), session.getMaxInactiveInterval());
+    }
+
+    @PostMapping(path = "/password", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Changes the password; needs the current one (400 if wrong)")
+    public ResponseEntity<Void> changePassword(@RequestBody @Valid PasswordChange body, HttpServletRequest request) {
+        Long userId = Sessions.userId(request.getSession(false));
+        auth.changePassword(userId, body.currentPassword(), body.newPassword());
+        request.changeSessionId();
+        return ResponseEntity.noContent().build();
     }
 }

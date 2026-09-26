@@ -4,20 +4,32 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Capital Gains Broker</title>
+<script>
+  // Applied before first paint so a saved theme never flashes the other one.
+  try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
 <style>
   :root {
     --bg: #f6f5f9; --surface: #ffffff; --surface-2: #f1eff6; --border: #e3e0ea;
     --text: #1d1a24; --muted: #6b6578; --accent: #7a2ee6; --accent-ink: #ffffff;
     --gain: #0a8a4a; --loss: #d0343a; --warn-bg: #fff4e0; --warn: #8a5a00;
     --radius: 14px; --shadow: 0 1px 2px rgba(20, 10, 40, .06), 0 4px 16px rgba(20, 10, 40, .05);
+    color-scheme: light;
   }
+  /* Theme: "system" follows the OS; data-theme="light"/"dark" (Settings) overrides it. */
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --bg: #121016; --surface: #1b1821; --surface-2: #24202c; --border: #312c3b;
       --text: #efeaf6; --muted: #a39cb2; --accent: #a56bff; --accent-ink: #120a1f;
       --gain: #3ccf85; --loss: #ff6b70; --warn-bg: #2d2413; --warn: #f0c060;
-      --shadow: none;
+      --shadow: none; color-scheme: dark;
     }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121016; --surface: #1b1821; --surface-2: #24202c; --border: #312c3b;
+    --text: #efeaf6; --muted: #a39cb2; --accent: #a56bff; --accent-ink: #120a1f;
+    --gain: #3ccf85; --loss: #ff6b70; --warn-bg: #2d2413; --warn: #f0c060;
+    --shadow: none; color-scheme: dark;
   }
   * { box-sizing: border-box; }
   body {
@@ -112,6 +124,27 @@
   td .link { font-size: 12.5px; }
   .stack { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
 
+  .btn-ghost.icon { padding: 6px 8px; display: inline-grid; place-items: center; }
+  .btn.fit { width: auto; padding: 10px 18px; }
+  .inline { display: flex; gap: 10px; }
+  .msg { font-size: 13.5px; min-height: 1.2em; margin: 8px 0; }
+  .msg.ok { color: var(--gain); } .msg.bad { color: var(--loss); }
+
+  dialog#settings {
+    width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto;
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 0;
+    background: var(--surface); color: var(--text); box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
+  }
+  dialog#settings::backdrop { background: rgba(10, 5, 20, .45); }
+  .dialog-head { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .dialog-head h2 { margin: 0; }
+  .set-section { padding: 18px 20px; border-bottom: 1px solid var(--border); }
+  .set-section:last-child { border-bottom: 0; }
+  .set-section h3 { font-size: 14px; margin: 0 0 12px; }
+  .tabs.three { grid-template-columns: repeat(3, 1fr); margin: 0; }
+  .tabs.three button[aria-checked="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+  #account-info { margin-bottom: 12px; }
+
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); max-width: min(520px, calc(100vw - 32px)); z-index: 20; }
   .toast .card { padding: 16px 18px; border-left: 4px solid var(--accent); }
   .toast h3 { margin: 0 0 6px; font-size: 15px; }
@@ -156,6 +189,9 @@
       <div class="brand"><span class="logo" aria-hidden="true">CG</span> Capital Gains Broker</div>
       <div class="spacer"></div>
       <span class="who" id="who"></span>
+      <button class="btn-ghost icon" id="open-settings" type="button" aria-label="Settings" title="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
       <button class="btn-ghost" id="logout" type="button">Log out</button>
     </div>
   </header>
@@ -191,7 +227,8 @@
         </div>
 
         <button class="btn buy" id="order-submit" type="submit" disabled>Buy</button>
-        <p class="note">Prices are simulated — type any price you want. Tax rules: 20% on the profit of a sale, sales up to $20,000.00 are exempt, and losses carry forward to offset future profits.</p>
+        <p class="note">Brokerage fee: <b class="num" id="fee-note">—</b> per order · <button type="button" class="link" id="fee-settings">change in Settings</button></p>
+        <p class="note">Prices are simulated — type any price you want. Tax rules: 20% on the profit of a sale (after fees), sales up to $20,000.00 are exempt, and losses carry forward to offset future profits.</p>
       </form>
     </section>
 
@@ -221,7 +258,7 @@
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th>Date</th><th>Order</th><th>Ticker</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Total</th>
+              <th>Date</th><th>Order</th><th>Ticker</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Total</th><th class="r">Fee</th>
               <th class="r">Result</th><th class="r">Tax</th><th></th>
             </tr></thead>
             <tbody id="history"></tbody>
@@ -231,6 +268,67 @@
     </div>
   </main>
 </div>
+
+<!-- ============ settings ============ -->
+<dialog id="settings" aria-labelledby="settings-title">
+  <div class="dialog-head">
+    <h2 id="settings-title">Settings</h2>
+    <button type="button" class="btn-ghost icon" id="close-settings" aria-label="Close settings">✕</button>
+  </div>
+
+  <section class="set-section" aria-labelledby="set-theme">
+    <h3 id="set-theme">Appearance</h3>
+    <div class="tabs three" role="radiogroup" aria-label="Theme" id="theme-choice">
+      <button type="button" role="radio" data-theme-choice="system">System</button>
+      <button type="button" role="radio" data-theme-choice="light">Light</button>
+      <button type="button" role="radio" data-theme-choice="dark">Dark</button>
+    </div>
+  </section>
+
+  <section class="set-section" aria-labelledby="set-trading">
+    <h3 id="set-trading">Trading</h3>
+    <form id="fee-form" novalidate>
+      <label for="fee">Brokerage fee per order ($)</label>
+      <div class="inline">
+        <input type="number" id="fee" min="0" max="1000" step="0.01" inputmode="decimal">
+        <button class="btn fit" type="submit">Save</button>
+      </div>
+      <div class="hint">Charged on every buy and sell. It adds to a buy's cost (average price) and comes out of a sale's proceeds. Past trades keep the fee they were charged.</div>
+      <div class="msg" id="fee-msg" role="status"></div>
+    </form>
+  </section>
+
+  <section class="set-section" aria-labelledby="set-account">
+    <h3 id="set-account">Account &amp; login</h3>
+    <div id="account-info"></div>
+    <button type="button" class="btn-ghost" id="verify-login">Verify login</button>
+    <div class="msg" id="verify-msg" role="status"></div>
+  </section>
+
+  <section class="set-section" aria-labelledby="set-password">
+    <h3 id="set-password">Change password</h3>
+    <form id="password-form" novalidate>
+      <input type="text" autocomplete="username" id="pw-username" hidden>
+      <div class="field">
+        <label for="pw-current">Current password</label>
+        <input type="password" id="pw-current" autocomplete="current-password" maxlength="128">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="pw-new">New password</label>
+          <input type="password" id="pw-new" autocomplete="new-password" maxlength="128">
+        </div>
+        <div class="field">
+          <label for="pw-confirm">Confirm</label>
+          <input type="password" id="pw-confirm" autocomplete="new-password" maxlength="128">
+        </div>
+      </div>
+      <div class="hint" style="margin-top:-6px">At least 6 characters. No other rules.</div>
+      <div class="msg" id="pw-msg" role="status"></div>
+      <button class="btn fit" type="submit">Change password</button>
+    </form>
+  </section>
+</dialog>
 
 <div class="toast" id="toast" hidden role="status"><div class="card"><h3 id="toast-title"></h3><div id="toast-body"></div></div></div>
 
@@ -331,7 +429,7 @@ async function showApp(user) {
   $("who").textContent = "@" + user.username;
   $("auth").hidden = true;
   $("app").hidden = false;
-  await refresh();
+  await Promise.all([refresh(), loadSettings().catch(() => {})]);
 }
 
 async function refresh() {
@@ -425,7 +523,7 @@ async function runPreview() {
     if (seq !== state.previewSeq) return; // a newer keystroke already asked again
     box.replaceChildren(...quoteLines(quote), explanation(quote));
     submit.disabled = false;
-    submit.textContent = `${state.side === "buy" ? "Buy" : "Sell"} ${quote.quantity} ${quote.ticker} · ${money(quote.totalValue)}`;
+    submit.textContent = `${state.side === "buy" ? "Buy" : "Sell"} ${quote.quantity} ${quote.ticker} · ${money(quote.netValue)}`;
   } catch (err) {
     if (seq !== state.previewSeq) return;
     if (err.status === 401) return showAuth();
@@ -441,16 +539,20 @@ function kv(label, value, cls = "") {
 function quoteLines(q) {
   if (q.operation === "buy") {
     return [
-      kv("Order total", money(q.totalValue)),
+      kv("Order value", money(q.totalValue)),
+      kv("Brokerage fee", money(q.fee)),
+      kv("Total cost", money(q.netValue)),
       kv("New average price", money(q.averagePriceAfter)),
       kv("Position after", `${q.positionAfter} shares`),
       kv("Tax", money(0), "total"),
     ];
   }
   return [
-    kv("Sale total", money(q.totalValue)),
-    kv("Average price", money(q.averagePriceBefore)),
-    kv("Gross result", signed(q.result), tone(q.result)),
+    kv("Sale value", money(q.totalValue)),
+    kv("Brokerage fee", "−" + money(q.fee)),
+    kv("Net proceeds", money(q.netValue)),
+    kv(`Cost (${q.quantity} × ${money(q.averagePriceBefore)} avg.)`, "−" + money(q.netValue - q.result)),
+    kv("Result", signed(q.result), tone(q.result)),
     kv("Exemption", q.result < 0 ? "n/a (loss)" : q.exempt ? "Exempt (≤ $20,000)" : "Not exempt"),
     kv("Capital-gains tax (20%)", money(q.tax)),
     kv("Net result", signed(q.netResult), "total " + tone(q.netResult)),
@@ -461,18 +563,20 @@ function quoteLines(q) {
 function explain(t) {
   const lines = [];
   if (t.operation === "buy") {
-    lines.push(`Bought ${t.quantity} × ${money(t.unitCost)} = ${money(t.totalValue)}. Buys are never taxed.`);
+    lines.push(`Bought ${t.quantity} × ${money(t.unitCost)} = ${money(t.totalValue)}, plus ${money(t.fee)} brokerage fee = ${money(t.netValue)}. Buys are never taxed.`);
+    if (Number(t.fee) > 0) lines.push("The fee is part of what the shares cost you, so it goes into the average price.");
     lines.push(`Average price is now ${money(t.averagePriceAfter)} over ${t.positionAfter} shares.`);
     return lines;
   }
   const result = Number(t.result), tax = Number(t.tax);
   const lossBefore = Number(t.accumulatedLossBefore), lossAfter = Number(t.accumulatedLossAfter);
-  lines.push(`Sold ${t.quantity} × ${money(t.unitCost)} = ${money(t.totalValue)}.`);
-  lines.push(`Against your average price of ${money(t.averagePriceBefore)}: ${t.quantity} × (${money(t.unitCost)} − ${money(t.averagePriceBefore)}) = ${signed(result)}.`);
+  const cost = Number(t.netValue) - result;
+  lines.push(`Sold ${t.quantity} × ${money(t.unitCost)} = ${money(t.totalValue)}, minus ${money(t.fee)} brokerage fee = ${money(t.netValue)} net.`);
+  lines.push(`Cost at your average price: ${t.quantity} × ${money(t.averagePriceBefore)} = ${money(cost)}. Result: ${money(t.netValue)} − ${money(cost)} = ${signed(result)}.`);
   if (result < 0) {
     lines.push(`That is a loss, so no tax. It is carried forward to offset future profits (loss to offset now ${money(lossAfter)}).`);
   } else if (t.exempt) {
-    lines.push(`The sale total is ≤ ${money(EXEMPTION_LIMIT)}, so it is exempt: no tax.`);
+    lines.push(`The sale value (before fees) is ≤ ${money(EXEMPTION_LIMIT)}, so it is exempt: no tax.`);
     if (lossBefore > 0) lines.push(`An exempt profit does not use up your loss carried forward (still ${money(lossAfter)}).`);
   } else {
     const used = Math.min(lossBefore, result);
@@ -545,7 +649,7 @@ function renderAccount() {
 
   $("history").replaceChildren(...(a.trades.length ? a.trades.flatMap((t) => {
     const sell = t.operation === "sell";
-    const detail = el("tr", { class: "why-row", hidden: "" }, el("td", { colspan: 9 }, explanation(t)));
+    const detail = el("tr", { class: "why-row", hidden: "" }, el("td", { colspan: 10 }, explanation(t)));
     const toggle = el("button", { type: "button", class: "link", "aria-expanded": "false", onclick: () => {
       detail.hidden = !detail.hidden;
       toggle.setAttribute("aria-expanded", String(!detail.hidden));
@@ -557,11 +661,105 @@ function renderAccount() {
       el("td", { class: "r num" }, t.quantity),
       el("td", { class: "r num" }, money(t.unitCost)),
       el("td", { class: "r num" }, money(t.totalValue)),
+      el("td", { class: "r num muted" }, money(t.fee)),
       el("td", { class: "r num " + (sell ? tone(t.result) : "") }, sell ? signed(t.result) : "—"),
       el("td", { class: "r num" }, sell ? [money(t.tax), " ", Number(t.result) > 0 ? el("span", { class: "badge " + (t.exempt ? "exempt" : "taxed") }, t.exempt ? "exempt" : "20%") : null] : "—"),
       el("td", { class: "r" }, toggle)), detail];
-  }) : [el("tr", {}, el("td", { colspan: 9, class: "empty" }, "Your trades will show up here."))]));
+  }) : [el("tr", {}, el("td", { colspan: 10, class: "empty" }, "Your trades will show up here."))]));
 }
+
+// ---------------- settings ----------------
+function setMsg(id, text, ok) {
+  $(id).textContent = text;
+  $(id).className = "msg " + (ok ? "ok" : "bad");
+}
+
+function currentTheme() {
+  try { return localStorage.getItem("theme") || "system"; } catch (e) { return "system"; }
+}
+
+function applyTheme(choice) {
+  if (choice === "system") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = choice;
+  try { localStorage.setItem("theme", choice); } catch (e) { /* private mode: theme just won't persist */ }
+  document.querySelectorAll("[data-theme-choice]").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.themeChoice === choice)));
+}
+document.querySelectorAll("[data-theme-choice]").forEach((b) => (b.onclick = () => applyTheme(b.dataset.themeChoice)));
+
+async function loadSettings() {
+  state.settings = await api("/api/broker/settings");
+  $("fee-note").textContent = money(state.settings.brokerageFee);
+  $("fee").value = Number(state.settings.brokerageFee).toFixed(2);
+}
+
+function renderAccountInfo(me) {
+  const when = (iso) => (iso ? dateFmt.format(new Date(iso)) : "—");
+  const hours = Math.round(me.idleTimeoutSeconds / 360) / 10;
+  $("account-info").replaceChildren(
+    kv("Username", "@" + me.username),
+    kv("Member since", when(me.memberSince)),
+    kv("Logged in at", when(me.loggedInAt)),
+    kv("Session ends after", `${hours} h without activity`));
+  $("pw-username").value = me.username;
+}
+
+async function openSettings() {
+  applyTheme(currentTheme());
+  ["fee-msg", "verify-msg", "pw-msg"].forEach((id) => ($(id).textContent = ""));
+  $("settings").showModal();
+  try {
+    renderAccountInfo(await api("/api/auth/me"));
+    await loadSettings();
+  } catch (err) {
+    if (err.status === 401) { $("settings").close(); return showAuth(); }
+  }
+}
+$("open-settings").onclick = openSettings;
+$("fee-settings").onclick = openSettings;
+$("close-settings").onclick = () => $("settings").close();
+$("settings").addEventListener("click", (e) => { if (e.target === $("settings")) $("settings").close(); });
+
+$("verify-login").onclick = async () => {
+  try {
+    const me = await api("/api/auth/me");
+    renderAccountInfo(me);
+    setMsg("verify-msg", `✓ Your session is valid: the server recognizes you as @${me.username}.`, true);
+  } catch (err) {
+    setMsg("verify-msg", err.status === 401 ? "Your session has expired. Please log in again." : err.message, false);
+    if (err.status === 401) setTimeout(() => { $("settings").close(); showAuth(); }, 1500);
+  }
+};
+
+$("fee-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = $("fee").value;
+  if (text === "" || !/^\d+(\.\d{1,2})?$/.test(text) || Number(text) > 1000) {
+    return setMsg("fee-msg", "Enter an amount from 0 to 1000 with up to 2 decimals.", false);
+  }
+  try {
+    state.settings = await api("/api/broker/settings", { method: "PUT", body: { brokerageFee: Number(text) } });
+    $("fee-note").textContent = money(state.settings.brokerageFee);
+    setMsg("fee-msg", `Saved. New orders will be charged ${money(state.settings.brokerageFee)}.`, true);
+    preview();
+  } catch (err) {
+    setMsg("fee-msg", err.message, false);
+  }
+});
+
+$("password-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const currentPassword = $("pw-current").value, newPassword = $("pw-new").value;
+  if (!currentPassword) return setMsg("pw-msg", "Enter your current password.", false);
+  if (newPassword.length < 6) return setMsg("pw-msg", "The new password needs at least 6 characters.", false);
+  if (newPassword !== $("pw-confirm").value) return setMsg("pw-msg", "The new passwords do not match.", false);
+  try {
+    await api("/api/auth/password", { method: "POST", body: { currentPassword, newPassword } });
+    ["pw-current", "pw-new", "pw-confirm"].forEach((id) => ($(id).value = ""));
+    setMsg("pw-msg", "Password changed. Use the new one next time you log in.", true);
+  } catch (err) {
+    setMsg("pw-msg", err.message, false);
+  }
+});
 
 // ---------------- boot ----------------
 renderChips();
