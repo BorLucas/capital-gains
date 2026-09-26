@@ -2,12 +2,13 @@ package com.example.capitalgains.broker;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
@@ -17,8 +18,6 @@ import java.time.Instant;
 @Entity
 @Table(name = "app_user")
 public class UserAccount {
-
-    public static final BigDecimal DEFAULT_BROKERAGE_FEE = new BigDecimal("5.00");
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -33,17 +32,18 @@ public class UserAccount {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    /** Brokerage fee charged per order; null means the default. */
-    @Column(name = "brokerage_fee", precision = 19, scale = 2)
-    private BigDecimal brokerageFee;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private Role role = Role.USER;
 
     protected UserAccount() {
         // required by JPA
     }
 
-    public UserAccount(String username, String passwordHash, Instant createdAt) {
+    public UserAccount(String username, String passwordHash, Role role, Instant createdAt) {
         this.username = username;
         this.passwordHash = passwordHash;
+        this.role = role;
         this.createdAt = createdAt;
     }
 
@@ -63,12 +63,16 @@ public class UserAccount {
         return createdAt;
     }
 
-    public BigDecimal getBrokerageFee() {
-        return brokerageFee == null ? DEFAULT_BROKERAGE_FEE : brokerageFee;
+    public Role getRole() {
+        return role;
     }
 
-    public void setBrokerageFee(BigDecimal brokerageFee) {
-        this.brokerageFee = brokerageFee;
+    public boolean isAdmin() {
+        return role == Role.ADMIN;
+    }
+
+    public void changeRole(Role role) {
+        this.role = role;
     }
 
     public void changePasswordHash(String passwordHash) {

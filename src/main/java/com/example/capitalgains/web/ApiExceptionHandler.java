@@ -1,7 +1,12 @@
 package com.example.capitalgains.web;
 
+import com.example.capitalgains.application.AdminOnlyException;
 import com.example.capitalgains.application.InvalidCredentialsException;
 import com.example.capitalgains.application.NotAuthenticatedException;
+import com.example.capitalgains.application.OwnRoleChangeException;
+import com.example.capitalgains.application.TickerAlreadyListedException;
+import com.example.capitalgains.application.TickerNotTradableException;
+import com.example.capitalgains.application.UserNotFoundException;
 import com.example.capitalgains.application.UsernameTakenException;
 import com.example.capitalgains.domain.error.CapitalGainsException;
 import com.example.capitalgains.domain.error.InvalidTradeException;
@@ -30,7 +35,7 @@ import java.util.List;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
-    @ExceptionHandler({SimulationNotFoundException.class, OrderNotFoundException.class})
+    @ExceptionHandler({SimulationNotFoundException.class, OrderNotFoundException.class, UserNotFoundException.class})
     public ProblemDetail notFound(RuntimeException ex) {
         return problem(HttpStatus.NOT_FOUND, ex.getMessage());
     }
@@ -40,13 +45,18 @@ public class ApiExceptionHandler {
         return problem(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }
 
-    @ExceptionHandler(UsernameTakenException.class)
-    public ProblemDetail conflict(UsernameTakenException ex) {
+    @ExceptionHandler(AdminOnlyException.class)
+    public ProblemDetail forbidden(AdminOnlyException ex) {
+        return problem(HttpStatus.FORBIDDEN, ex.getMessage());
+    }
+
+    @ExceptionHandler({UsernameTakenException.class, TickerAlreadyListedException.class, OwnRoleChangeException.class})
+    public ProblemDetail conflict(RuntimeException ex) {
         return problem(HttpStatus.CONFLICT, ex.getMessage());
     }
 
-    @ExceptionHandler(SellExceedsPortfolioException.class)
-    public ProblemDetail businessRule(SellExceedsPortfolioException ex) {
+    @ExceptionHandler({SellExceedsPortfolioException.class, TickerNotTradableException.class})
+    public ProblemDetail businessRule(RuntimeException ex) {
         return problem(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
     }
 

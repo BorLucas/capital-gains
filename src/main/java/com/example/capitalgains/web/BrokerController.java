@@ -2,7 +2,8 @@ package com.example.capitalgains.web;
 
 import com.example.capitalgains.application.AccountView;
 import com.example.capitalgains.application.BrokerService;
-import com.example.capitalgains.application.BrokerSettings;
+import com.example.capitalgains.application.RulesView;
+import com.example.capitalgains.application.TickerView;
 import com.example.capitalgains.application.TradeView;
 import com.example.capitalgains.domain.Trade;
 import com.example.capitalgains.format.TradeJson;
@@ -11,8 +12,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.DecimalMax;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -24,17 +23,18 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * The logged-in user's broker: place buys/sells on a ticker, preview what a
  * trade would pay before placing it, and read positions and the trade log.
- * Every route needs a session (401 otherwise).
+ * Every route needs a session (401 otherwise). Fees and tax rules are set by an
+ * admin ({@link AdminController}); a user only reads them here.
  */
 @RestController
 @RequestMapping(value = "/api/broker", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -65,14 +65,6 @@ public class BrokerController {
         }
     }
 
-    public record Settings(
-            @NotNull(message = "brokerageFee is required")
-            @DecimalMin(value = "0.00", message = "brokerageFee cannot be negative")
-            @DecimalMax(value = "1000.00", message = "brokerageFee cannot exceed 1000.00")
-            @Digits(integer = 4, fraction = 2, message = "brokerageFee must have at most 2 decimal places")
-            BigDecimal brokerageFee) {
-    }
-
     private final BrokerService broker;
 
     public BrokerController(BrokerService broker) {
@@ -85,16 +77,18 @@ public class BrokerController {
         return broker.account(Sessions.userId(session));
     }
 
-    @GetMapping("/settings")
-    @Operation(summary = "The user's broker settings (brokerage fee per order)")
-    public BrokerSettings settings(HttpSession session) {
-        return broker.settings(Sessions.userId(session));
+    @GetMapping("/tickers")
+    @Operation(summary = "Tickers open for buying, with their simulated reference price")
+    public List<TickerView> tickers(HttpSession session) {
+        Sessions.userId(session);
+        return broker.activeTickers();
     }
 
-    @PutMapping(path = "/settings", consumes = MediaType.APPLICATION_JSON_VALUE)
-    @Operation(summary = "Updates the broker settings; applies to orders placed from now on")
-    public BrokerSettings updateSettings(@RequestBody @Valid Settings body, HttpSession session) {
-        return broker.updateSettings(Sessions.userId(session), new BrokerSettings(body.brokerageFee()));
+    @GetMapping("/rules")
+    @Operation(summary = "The fees and tax rules new orders are placed under (set by an admin)")
+    public RulesView rules(HttpSession session) {
+        Sessions.userId(session);
+        return broker.rules();
     }
 
     @PostMapping(path = "/quote", consumes = MediaType.APPLICATION_JSON_VALUE)

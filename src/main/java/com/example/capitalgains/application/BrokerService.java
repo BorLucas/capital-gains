@@ -1,8 +1,11 @@
 package com.example.capitalgains.application;
 
+import com.example.capitalgains.broker.BrokerConfig;
+import com.example.capitalgains.broker.BrokerConfigRepository;
 import com.example.capitalgains.broker.PlacedTrade;
 import com.example.capitalgains.broker.PlacedTradeRepository;
-import com.example.capitalgains.broker.UserAccount;
+import com.example.capitalgains.broker.Ticker;
+import com.example.capitalgains.broker.TickerRepository;
 import com.example.capitalgains.broker.UserAccountRepository;
 import com.example.capitalgains.domain.Money;
 import com.example.capitalgains.domain.TaxCalculator;
@@ -23,12 +26,13 @@ import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 /**
- * The broker simulator: users buy and sell tickers, and every sell is taxed by
- * the same {@link TaxCalculator} the challenge API uses. Each ticker is its own
- * position (its own average price and loss carried forward), and nothing but
- * the raw trades (with the fee each was charged) is stored: results and taxes
- * are always a replay. The brokerage fee comes from the user's settings, never
- * from the request.
+ * The broker simulator: users buy and sell listed tickers, and every sell is
+ * taxed by the same {@link TaxCalculator} the challenge API uses. Each ticker
+ * is its own position (its own average price and loss carried forward).
+ *
+ * <p>The fee and the tax rules come from the admin's {@link BrokerConfig},
+ * never from the request, and are stamped on each trade when it is placed.
+ * Nothing else is stored: results and taxes are always a replay.</p>
  *
  * <p>This path is synchronous on purpose, like the CLI: a user placing an order
  * expects the result on screen right away, not a queued job to poll.</p>
@@ -38,21 +42,26 @@ public class BrokerService {
 
     private final UserAccountRepository users;
     private final PlacedTradeRepository trades;
+    private final TickerRepository tickers;
+    private final BrokerConfigRepository config;
     private final Clock clock;
     private final TaxCalculator calculator = new TaxCalculator();
 
-    public BrokerService(UserAccountRepository users, PlacedTradeRepository trades, Clock clock) {
+    public BrokerService(UserAccountRepository users, PlacedTradeRepository trades, TickerRepository tickers,
+                         BrokerConfigRepository config, Clock clock) {
         this.users = users;
         this.trades = trades;
+        this.tickers = tickers;
+        this.config = config;
         this.clock = clock;
     }
 
     /** What the trade would do, without executing it. */
     @Transactional(readOnly = true)
     public TradeView quote(Long userId, String ticker, Trade trade) {
-        UserAccount user = users.findById(userId).orElseThrow(NotAuthenticatedException::new);
-        String symbol = normalize(ticker);
-        return TradeView.of(null, symbol, simulate(userId, symbol, withFee(trade, user)), null);
+        users.findById(userId).orElseThrow(NotAuthenticatedException::new);
+        String symbol = tradable(ticker, trade);
+        return TradeView.of(null, symbol, simulate(userId, symbol, charged(trade)), null);
     }
 
     /**
@@ -61,9 +70,9 @@ public class BrokerService {
      */
     @Transactional
     public TradeView place(Long userId, String ticker, Trade trade) {
-        UserAccount user = users.lockById(userId).orElseThrow(NotAuthenticatedException::new);
-        String symbol = normalize(ticker);
-        Trade charged = withFee(trade, user);
+        users.lockById(userId).orElseThrow(NotAuthenticatedException::new);
+        String symbol = tradable(ticker, trade);
+        Trade charged = charged(trade);
         TradeBreakdown breakdown = simulate(userId, symbol, charged);
         PlacedTrade saved = trades.save(PlacedTrade.of(userId, symbol, charged, Instant.now(clock)));
         return TradeView.of(saved.getId(), symbol, breakdown, saved.getExecutedAt());
@@ -91,22 +100,38 @@ public class BrokerService {
         return new AccountView(invested, realized, tax, realized.subtract(tax), positions, log);
     }
 
+    /** Tickers open for buying (the order ticket's list). */
     @Transactional(readOnly = true)
-    public BrokerSettings settings(Long userId) {
-        UserAccount user = users.findById(userId).orElseThrow(NotAuthenticatedException::new);
-        return new BrokerSettings(user.getBrokerageFee());
+    public List<TickerView> activeTickers() {
+        return tickers.findByActiveTrueOrderBySymbolAsc().stream().map(TickerView::of).toList();
     }
 
-    /** Applies to orders placed from now on; past trades keep the fee they were charged. */
-    @Transactional
-    public BrokerSettings updateSettings(Long userId, BrokerSettings settings) {
-        UserAccount user = users.findById(userId).orElseThrow(NotAuthenticatedException::new);
-        user.setBrokerageFee(Money.of(settings.brokerageFee()).amount());
-        return new BrokerSettings(user.getBrokerageFee());
+    /** The fees and tax rules new orders are placed under. */
+    @Transactional(readOnly = true)
+    public RulesView rules() {
+        BrokerConfig current = currentConfig();
+        return RulesView.of(current.fees(), current.rules());
     }
 
-    private static Trade withFee(Trade trade, UserAccount user) {
-        return trade.withFee(Money.of(user.getBrokerageFee()));
+    private BrokerConfig currentConfig() {
+        return config.findById(BrokerConfig.ID)
+                .orElseThrow(() -> new IllegalStateException("broker config missing: BrokerBootstrap did not run"));
+    }
+
+    /** Only a listed ticker can be traded; a delisted one can still be sold, never bought. */
+    private String tradable(String ticker, Trade trade) {
+        String symbol = ticker.trim().toUpperCase(Locale.ROOT);
+        Ticker listed = tickers.findById(symbol)
+                .orElseThrow(() -> new TickerNotTradableException("ticker not listed: " + symbol));
+        if (!listed.isActive() && trade.isBuy()) {
+            throw new TickerNotTradableException(symbol + " is delisted: it can be sold but not bought");
+        }
+        return symbol;
+    }
+
+    private Trade charged(Trade trade) {
+        BrokerConfig current = currentConfig();
+        return trade.withFee(current.fees().feeFor(trade.totalValue())).withRules(current.rules());
     }
 
     private TradeBreakdown simulate(Long userId, String ticker, Trade trade) {
@@ -134,9 +159,5 @@ public class BrokerService {
 
     private static BigDecimal sum(List<BigDecimal> values) {
         return values.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    private static String normalize(String ticker) {
-        return ticker.trim().toUpperCase(Locale.ROOT);
     }
 }

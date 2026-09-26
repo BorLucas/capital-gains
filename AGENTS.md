@@ -63,6 +63,7 @@ domain/            pure Java core — the tax rules
   Money            money value object: 2dp, HALF_UP, centralizes rounding
   Trade            one buy/sell (type, unitCost: Money, quantity, fee: Money = 0)
   Tax, TradeResult, TradeType
+  TaxRules, FeeSchedule, FeeType   configurable rate/exemption and brokerage fee
   TaxCalculator    walks a List<Trade>, returns List<TradeResult>; breakdown() adds
                    the full walk (avg price, result, exemption, loss) per trade
   TradeBreakdown   one step of that walk
@@ -70,7 +71,7 @@ domain/            pure Java core — the tax rules
   error/           CapitalGainsException hierarchy
 format/            TradeJson / TaxJson — the challenge's JSON DTOs, shared by web + cli
 orders/            async work queue: SimulationOrder entity, OrderStatus, OrderView, repo
-broker/            JPA: UserAccount (app_user) and PlacedTrade, the broker UI's data
+broker/            JPA: UserAccount (app_user, with Role), PlacedTrade, Ticker, BrokerConfig (1 row)
 application/        use cases / orchestration (Spring @Service beans)
   SubmitOrderService, OrderProcessor, OrderExecution, OrderQueryService, HistoryService
   AuthService, PasswordHasher, BrokerService (+ TradeView / PositionView / AccountView)
@@ -107,6 +108,11 @@ Encoded in `Portfolio` (a small explicit state machine) and validated by
   part of its cost (`netValue`), so it enters the average price; a sell's fee
   comes out of the proceeds before the result. The exemption still uses the
   **gross** sale value (`totalValue`). The 9 official cases have no fee.
+- **Tax rules are data** (`TaxRules`: rate + exemption limit, carried by each
+  `Trade`; default `TaxRules.CHALLENGE` = 20% / 20,000). The broker stamps the
+  admin's current rules on each trade; the challenge API and CLI never change
+  them. `FeeSchedule` (FIXED per order or PERCENT of the order value) computes
+  the fee. Both validate their ranges (`InvalidRuleException`).
 
 `Portfolio` states: `EMPTY` <-> `HOLDING`. `apply(TradeEvent)` validates the
 transition (guard) before running the action. Full write-up:
@@ -164,11 +170,23 @@ One self-contained file, vanilla JS, no framework, no Node build — keep it tha
   (`application/PasswordHasher`) — no Spring Security. The only password rule
   is length >= 6, by product decision (`123456` is allowed). Usernames are
   case-insensitive (stored lowercase).
-- **Settings** (gear button, native `<dialog>`): theme (System/Light/Dark, kept in
-  `localStorage`, applied before first paint), brokerage fee per order
-  (`UserAccount.brokerageFee`, default 5.00, applied server-side — the client
-  never sends a fee), account + session info with "Verify login" (`/api/auth/me`),
-  and password change (needs the current password).
+- **Roles**: `USER` or `ADMIN` (`broker/Role`). `AdminService` checks the role
+  itself, against the database, on every call (`requireAdmin`) — do not rely on
+  the web layer or on the UI hiding the Admin tab. An admin cannot change their
+  own role, so there is always one admin. `BrokerBootstrap` (not under `cli`)
+  seeds the config row, a starter ticker catalog and the first admin
+  (`broker.admin.username`/`password`; blank password = random, logged once).
+- **Admin-owned data**: fee schedule + tax rules (`BrokerConfig`), the ticker
+  catalog (`Ticker`; a delisted ticker can be sold, not bought). The client never
+  sends a fee or rules: `BrokerService.charged` stamps the current ones on the
+  trade, and `PlacedTrade` stores them so history never changes.
+- **Settings** (gear button, native `<dialog>`, every user): theme
+  (System/Light/Dark, `localStorage`, applied before first paint), read-only fees
+  and rules, account + session info with "Verify login", password change.
+- **Admin view** (header tab, admins only): rules form, ticker table, users table.
+- **Tests touching rules** reset them `@AfterEach` (the Spring context and its DB
+  are shared across test classes). Tests get an admin by promoting a user through
+  `UserAccountRepository`.
 - **Tax** is never stored. `BrokerService` replays the user's trades for a
   ticker through `TaxCalculator.breakdown` on every quote, trade and account
   read. Each ticker is an independent `Portfolio`.

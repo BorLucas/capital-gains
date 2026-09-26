@@ -1,5 +1,6 @@
 package com.example.capitalgains.domain;
 
+import com.example.capitalgains.domain.error.InvalidRuleException;
 import com.example.capitalgains.domain.error.InvalidTradeException;
 import com.example.capitalgains.domain.error.SellExceedsPortfolioException;
 import org.junit.jupiter.api.DisplayName;
@@ -271,6 +272,43 @@ class TaxCalculatorTest {
         void negativeFee() {
             assertThatThrownBy(() -> Trade.buy("10.00", 1).withFee(Money.of("-1.00")))
                     .isInstanceOf(InvalidTradeException.class);
+        }
+
+        @Test
+        @DisplayName("each sell is taxed under its own rules")
+        void customRules() {
+            var fifteenPercentNoExemption = new TaxRules(new java.math.BigDecimal("0.15"), Money.ZERO);
+            var walk = calculator.breakdown(List.of(
+                    Trade.buy("10.00", 100),
+                    Trade.sell("20.00", 50).withRules(fifteenPercentNoExemption),
+                    Trade.sell("20.00", 50)));
+
+            // 500.00 profit, not exempt under a 0 limit: 15% = 75.00
+            assertThat(walk.get(1).exempt()).isFalse();
+            assertThat(walk.get(1).tax().amount()).isEqualTo(Money.of("75.00"));
+            // same sell under the challenge rules: 1,000.00 <= 20,000.00, exempt
+            assertThat(walk.get(2).exempt()).isTrue();
+            assertThat(walk.get(2).tax()).isEqualTo(Tax.zero());
+        }
+
+        @Test
+        @DisplayName("tax rules are validated")
+        void invalidRules() {
+            assertThatThrownBy(() -> new TaxRules(new java.math.BigDecimal("1.01"), Money.ZERO))
+                    .isInstanceOf(InvalidRuleException.class);
+            assertThatThrownBy(() -> new TaxRules(new java.math.BigDecimal("0.20"), Money.of("-1")))
+                    .isInstanceOf(InvalidRuleException.class);
+        }
+
+        @Test
+        @DisplayName("fee schedules: fixed per order or a percentage of the order value")
+        void feeSchedules() {
+            assertThat(FeeSchedule.fixed("5.00").feeFor(Money.of("100000"))).isEqualTo(Money.of("5.00"));
+            assertThat(FeeSchedule.percent("0.5").feeFor(Money.of("250.00"))).isEqualTo(Money.of("1.25"));
+            // 0.3% of 333.33 = 0.99999 -> 1.00 (HALF_UP, like any Money)
+            assertThat(FeeSchedule.percent("0.3").feeFor(Money.of("333.33"))).isEqualTo(Money.of("1.00"));
+            assertThatThrownBy(() -> FeeSchedule.percent("100.01")).isInstanceOf(InvalidRuleException.class);
+            assertThatThrownBy(() -> FeeSchedule.fixed("-1")).isInstanceOf(InvalidRuleException.class);
         }
 
         @Test
