@@ -16,3 +16,11 @@ jobs:
           java-version: '21'
           cache: maven
       - run: mvn -B verify
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build -t capital-gains .
+      - name: Smoke test (CLI mode)
+        run: docker run -i --rm -m 256m capital-gains --spring.profiles.active=cli < examples/input.txt

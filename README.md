@@ -43,6 +43,14 @@ mvn -DskipTests package  # builds the jar
 java -jar target/capital-gains-0.0.1-SNAPSHOT.jar --spring.profiles.active=cli < examples/input.txt
 ```
 
+### Docker
+
+```bash
+docker compose up --build        # API on port 8080, capped at 256 MB / 1 CPU
+docker build -t capital-gains .
+docker run -i --rm capital-gains --spring.profiles.active=cli < examples/input.txt
+```
+
 ## Endpoints
 
 | Method | Route | Description |

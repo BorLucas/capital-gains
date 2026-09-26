@@ -1,0 +1,8 @@
+services:
+  api:
+    build: .
+    image: capital-gains
+    ports:
+      - "8080:8080"
+    mem_limit: 256m
+    cpus: 1
