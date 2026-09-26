@@ -8,7 +8,7 @@ RUN mvn -B verify
 
 # Runtime stage: JRE only, no Maven, no JDK, no sources
 FROM eclipse-temurin:21-jre-alpine
-RUN addgroup -S app && adduser -S app -G app
+RUN addgroup -S app && adduser -S app -G app && mkdir /data && chown app:app /data
 USER app
 WORKDIR /app
 COPY --from=build /src/target/capital-gains-*.jar app.jar

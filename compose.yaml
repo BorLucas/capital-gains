@@ -6,3 +6,12 @@ services:
       - "8080:8080"
     mem_limit: 256m
     cpus: 1
+    environment:
+      # File-based H2 on a volume: broker users and trades survive restarts
+      SPRING_DATASOURCE_URL: jdbc:h2:file:/data/capitalgains
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    volumes:
+      - data:/data
+
+volumes:
+  data:

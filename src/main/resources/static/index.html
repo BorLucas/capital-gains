@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capital Gains Broker</title>
+<style>
+  :root {
+    --bg: #f6f5f9; --surface: #ffffff; --surface-2: #f1eff6; --border: #e3e0ea;
+    --text: #1d1a24; --muted: #6b6578; --accent: #7a2ee6; --accent-ink: #ffffff;
+    --gain: #0a8a4a; --loss: #d0343a; --warn-bg: #fff4e0; --warn: #8a5a00;
+    --radius: 14px; --shadow: 0 1px 2px rgba(20, 10, 40, .06), 0 4px 16px rgba(20, 10, 40, .05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121016; --surface: #1b1821; --surface-2: #24202c; --border: #312c3b;
+      --text: #efeaf6; --muted: #a39cb2; --accent: #a56bff; --accent-ink: #120a1f;
+      --gain: #3ccf85; --loss: #ff6b70; --warn-bg: #2d2413; --warn: #f0c060;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  .num { font-variant-numeric: tabular-nums; }
+  .gain { color: var(--gain); } .loss { color: var(--loss); } .muted { color: var(--muted); }
+  [hidden] { display: none !important; }
+
+  /* ---------- auth ---------- */
+  .auth { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+  .auth-card { width: 100%; max-width: 380px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; }
+  .logo { width: 30px; height: 30px; border-radius: 9px; background: var(--accent); display: grid; place-items: center; color: var(--accent-ink); font-size: 15px; }
+  .auth h1 { font-size: 26px; margin: 28px 0 6px; letter-spacing: -.01em; }
+  .auth p.lead { margin: 0 0 22px; color: var(--muted); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .pad { padding: 20px; }
+
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--surface-2); border-radius: 10px; padding: 4px; margin-bottom: 18px; }
+  .tabs button { border: 0; background: none; padding: 8px; border-radius: 7px; cursor: pointer; font-weight: 600; color: var(--muted); }
+  .tabs button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+  .tabs.side button[aria-selected="true"][data-side="buy"] { background: var(--gain); color: #fff; }
+  .tabs.side button[aria-selected="true"][data-side="sell"] { background: var(--loss); color: #fff; }
+
+  label { display: block; font-size: 13px; font-weight: 600; margin: 0 0 6px; color: var(--muted); }
+  .field { margin-bottom: 14px; }
+  input[type=text], input[type=password], input[type=number] {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+  }
+  input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .hint { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+  .btn { width: 100%; border: 0; border-radius: 10px; padding: 11px 14px; font-weight: 700; cursor: pointer; background: var(--accent); color: var(--accent-ink); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.buy { background: var(--gain); color: #fff; } .btn.sell { background: var(--loss); color: #fff; }
+  .btn-ghost { white-space: nowrap; border: 1px solid var(--border); background: none; border-radius: 9px; padding: 6px 12px; cursor: pointer; font-weight: 600; }
+  .error { color: var(--loss); font-size: 13.5px; min-height: 1.2em; margin: 4px 0 10px; }
+
+  /* ---------- app ---------- */
+  header.top { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
+  .top-inner { max-width: 1200px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  .top-inner .spacer { flex: 1; }
+  @media (max-width: 480px) { .who { display: none; } }
+  .who { color: var(--muted); font-size: 14px; }
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 48px; display: grid; gap: 20px; grid-template-columns: 360px minmax(0, 1fr); align-items: start; }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
+  .ticket { position: sticky; top: 76px; }
+  @media (max-width: 900px) { .ticket { position: static; } }
+  h2 { font-size: 16px; margin: 0 0 14px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { border: 1px solid var(--border); background: var(--surface-2); border-radius: 999px; padding: 3px 10px; font-size: 12.5px; cursor: pointer; }
+  .chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .holding { display: flex; justify-content: space-between; align-items: center; font-size: 13px; background: var(--surface-2); border-radius: 10px; padding: 8px 12px; margin-bottom: 14px; }
+  .link { background: none; border: 0; color: var(--accent); font-weight: 700; cursor: pointer; padding: 0; }
+
+  .preview { border-top: 1px dashed var(--border); margin-top: 6px; padding-top: 14px; }
+  .kv { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: 14px; }
+  .kv span:first-child { color: var(--muted); }
+  .kv.total { font-weight: 700; font-size: 15px; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 8px; }
+  .badge { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+  .badge.exempt { background: color-mix(in srgb, var(--gain) 14%, transparent); color: var(--gain); }
+  .badge.taxed { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+  .badge.buy { background: color-mix(in srgb, var(--gain) 14%, transparent); color: var(--gain); }
+  .badge.sell { background: color-mix(in srgb, var(--loss) 14%, transparent); color: var(--loss); }
+  .explain { font-size: 13px; color: var(--muted); background: var(--surface-2); border-radius: 10px; padding: 10px 12px; margin: 10px 0 14px; }
+  .explain p { margin: 0 0 4px; } .explain p:last-child { margin: 0; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 700px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stat .value { font-size: 18px; } }
+  .stat { padding: 14px 16px; }
+  .stat .label { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+  .stat .value { font-size: 21px; font-weight: 700; margin-top: 4px; letter-spacing: -.01em; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  th.r, td.r { text-align: right; }
+  tbody tr.clickable { cursor: pointer; } tbody tr.clickable:hover { background: var(--surface-2); }
+  tr.closed td { color: var(--muted); }
+  .ticker { font-weight: 700; }
+  .empty { padding: 28px 10px; text-align: center; color: var(--muted); }
+  tr.why-row td { white-space: normal; padding-top: 0; }
+  tr.why-row .explain { margin: 0; }
+  td .link { font-size: 12.5px; }
+  .stack { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); max-width: min(520px, calc(100vw - 32px)); z-index: 20; }
+  .toast .card { padding: 16px 18px; border-left: 4px solid var(--accent); }
+  .toast h3 { margin: 0 0 6px; font-size: 15px; }
+  .note { font-size: 12.5px; color: var(--muted); margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<!-- ============ login / sign-up ============ -->
+<section class="auth" id="auth" hidden>
+  <div class="auth-card">
+    <div class="brand"><span class="logo" aria-hidden="true">CG</span> Capital Gains Broker</div>
+    <h1>Trade, then see the tax.</h1>
+    <p class="lead">A simulated brokerage. Buy and sell stocks and see your average price, profit and capital-gains tax on every sale.</p>
+    <div class="card pad">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-login" aria-selected="true">Log in</button>
+        <button type="button" role="tab" id="tab-register" aria-selected="false">Create account</button>
+      </div>
+      <form id="auth-form" novalidate>
+        <div class="field">
+          <label for="username">Username</label>
+          <input type="text" id="username" autocomplete="username" required maxlength="30" autocapitalize="off" spellcheck="false">
+          <div class="hint" id="username-hint" hidden>3–30 letters, digits, dots, dashes or underscores.</div>
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" autocomplete="current-password" required maxlength="128">
+          <div class="hint" id="password-hint" hidden>At least 6 characters. No other rules.</div>
+        </div>
+        <div class="error" id="auth-error" role="alert"></div>
+        <button class="btn" id="auth-submit" type="submit">Log in</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ============ broker ============ -->
+<div id="app" hidden>
+  <header class="top">
+    <div class="top-inner">
+      <div class="brand"><span class="logo" aria-hidden="true">CG</span> Capital Gains Broker</div>
+      <div class="spacer"></div>
+      <span class="who" id="who"></span>
+      <button class="btn-ghost" id="logout" type="button">Log out</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- order ticket -->
+    <section class="card pad ticket" aria-labelledby="ticket-title">
+      <h2 id="ticket-title">New order</h2>
+      <div class="tabs side" role="tablist" aria-label="Order side">
+        <button type="button" role="tab" data-side="buy" aria-selected="true">Buy</button>
+        <button type="button" role="tab" data-side="sell" aria-selected="false">Sell</button>
+      </div>
+      <form id="order-form" novalidate>
+        <div class="field">
+          <label for="ticker">Ticker</label>
+          <input type="text" id="ticker" maxlength="10" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. PETR4">
+          <div class="chips" id="chips" aria-label="Suggested tickers"></div>
+        </div>
+        <div class="holding" id="holding" hidden></div>
+        <div class="row2">
+          <div class="field">
+            <label for="quantity">Quantity</label>
+            <input type="number" id="quantity" min="1" step="1" inputmode="numeric" placeholder="0">
+          </div>
+          <div class="field">
+            <label for="price">Unit price ($)</label>
+            <input type="number" id="price" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+          </div>
+        </div>
+
+        <div class="preview" id="preview" aria-live="polite">
+          <div class="muted" style="font-size:13.5px">Fill in the order to preview it.</div>
+        </div>
+
+        <button class="btn buy" id="order-submit" type="submit" disabled>Buy</button>
+        <p class="note">Prices are simulated — type any price you want. Tax rules: 20% on the profit of a sale, sales up to $20,000.00 are exempt, and losses carry forward to offset future profits.</p>
+      </form>
+    </section>
+
+    <div class="stack">
+      <section class="stats" aria-label="Totals">
+        <div class="card stat"><div class="label">Invested (at avg. price)</div><div class="value num" id="s-invested">—</div></div>
+        <div class="card stat"><div class="label">Realized result</div><div class="value num" id="s-realized">—</div></div>
+        <div class="card stat"><div class="label">Tax paid</div><div class="value num" id="s-tax">—</div></div>
+        <div class="card stat"><div class="label">Net after tax</div><div class="value num" id="s-net">—</div></div>
+      </section>
+
+      <section class="card pad" aria-labelledby="positions-title">
+        <h2 id="positions-title">Portfolio</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Ticker</th><th class="r">Shares</th><th class="r">Avg. price</th><th class="r">Invested</th>
+              <th class="r">Realized</th><th class="r">Tax paid</th><th class="r">Loss to offset</th>
+            </tr></thead>
+            <tbody id="positions"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card pad" aria-labelledby="history-title">
+        <h2 id="history-title">Statement</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Date</th><th>Order</th><th>Ticker</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Total</th>
+              <th class="r">Result</th><th class="r">Tax</th><th></th>
+            </tr></thead>
+            <tbody id="history"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast" hidden role="status"><div class="card"><h3 id="toast-title"></h3><div id="toast-body"></div></div></div>
+
+<script>
+"use strict";
+
+// Simulated reference prices: just a starting point, the user can type any price.
+const SUGGESTIONS = { PETR4: 38.50, VALE3: 62.10, ITUB4: 34.20, BBDC4: 13.80, BBAS3: 27.90, WEGE3: 52.30, ABEV3: 12.40, MGLU3: 9.75 };
+const EXEMPTION_LIMIT = 20000;
+
+const $ = (id) => document.getElementById(id);
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const money = (v) => usd.format(Number(v));
+const signed = (v) => (Number(v) > 0 ? "+" : "") + money(v);
+const tone = (v) => (Number(v) > 0 ? "gain" : Number(v) < 0 ? "loss" : "");
+const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" });
+
+/** Builds an element; strings become text nodes, so user data is never parsed as HTML. */
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") node.className = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v);
+  }
+  for (const c of children.flat()) if (c != null && c !== false) node.append(c instanceof Node ? c : String(c));
+  return node;
+}
+
+async function api(path, { method = "GET", body } = {}) {
+  const res = await fetch(path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: "same-origin",
+  });
+  const data = res.status === 204 ? null : await res.json().catch(() => null);
+  if (!res.ok) {
+    const message = data?.errors?.join("; ") || data?.detail || `Request failed (${res.status})`;
+    throw Object.assign(new Error(message), { status: res.status });
+  }
+  return data;
+}
+
+// ---------------- state ----------------
+const state = { user: null, account: null, side: "buy", authMode: "login", previewSeq: 0 };
+
+// ---------------- auth ----------------
+function setAuthMode(mode) {
+  state.authMode = mode;
+  const register = mode === "register";
+  $("tab-login").setAttribute("aria-selected", String(!register));
+  $("tab-register").setAttribute("aria-selected", String(register));
+  $("auth-submit").textContent = register ? "Create account" : "Log in";
+  $("username-hint").hidden = !register;
+  $("password-hint").hidden = !register;
+  $("password").autocomplete = register ? "new-password" : "current-password";
+  $("auth-error").textContent = "";
+}
+$("tab-login").onclick = () => setAuthMode("login");
+$("tab-register").onclick = () => setAuthMode("register");
+
+$("auth-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const username = $("username").value.trim();
+  const password = $("password").value;
+  if (state.authMode === "register" && password.length < 6) {
+    $("auth-error").textContent = "Password must have at least 6 characters.";
+    return;
+  }
+  $("auth-submit").disabled = true;
+  try {
+    const path = state.authMode === "register" ? "/api/auth/register" : "/api/auth/login";
+    showApp(await api(path, { method: "POST", body: { username, password } }));
+    $("password").value = "";
+  } catch (err) {
+    $("auth-error").textContent = err.message;
+  } finally {
+    $("auth-submit").disabled = false;
+  }
+});
+
+$("logout").onclick = async () => {
+  await api("/api/auth/logout", { method: "POST" }).catch(() => {});
+  showAuth();
+};
+
+function showAuth() {
+  state.user = null;
+  $("app").hidden = true;
+  $("auth").hidden = false;
+  setAuthMode(state.authMode);
+  $("username").focus();
+}
+
+async function showApp(user) {
+  state.user = user;
+  $("who").textContent = "@" + user.username;
+  $("auth").hidden = true;
+  $("app").hidden = false;
+  await refresh();
+}
+
+async function refresh() {
+  try {
+    state.account = await api("/api/broker/account");
+  } catch (err) {
+    if (err.status === 401) return showAuth();
+    throw err;
+  }
+  renderAccount();
+  renderHolding();
+  preview();
+}
+
+// ---------------- order ticket ----------------
+function setSide(side) {
+  state.side = side;
+  document.querySelectorAll(".tabs.side button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.side === side)));
+  $("order-submit").className = "btn " + side;
+  renderHolding();
+  preview();
+}
+document.querySelectorAll(".tabs.side button").forEach((b) => (b.onclick = () => setSide(b.dataset.side)));
+
+function renderChips() {
+  const current = $("ticker").value.trim().toUpperCase();
+  $("chips").replaceChildren(...Object.keys(SUGGESTIONS).map((t) =>
+    el("button", { type: "button", class: "chip", "aria-pressed": String(t === current), onclick: () => pickTicker(t) }, t)));
+}
+
+function pickTicker(ticker) {
+  $("ticker").value = ticker;
+  if (!$("price").value && SUGGESTIONS[ticker]) $("price").value = SUGGESTIONS[ticker].toFixed(2);
+  renderChips();
+  renderHolding();
+  preview();
+  $("quantity").focus();
+}
+
+function positionOf(ticker) {
+  return state.account?.positions.find((p) => p.ticker === ticker);
+}
+
+function renderHolding() {
+  const ticker = $("ticker").value.trim().toUpperCase();
+  const pos = ticker && positionOf(ticker);
+  const box = $("holding");
+  if (!ticker || !pos || pos.quantity === 0) {
+    box.hidden = !(state.side === "sell" && ticker);
+    box.replaceChildren(el("span", { class: "muted" }, `You hold no ${ticker} shares.`));
+    return;
+  }
+  box.hidden = false;
+  const children = [el("span", {}, `You hold `, el("b", { class: "num" }, pos.quantity), ` at avg. `, el("b", { class: "num" }, money(pos.averagePrice)))];
+  if (state.side === "sell") {
+    children.push(el("button", { type: "button", class: "link", onclick: () => { $("quantity").value = pos.quantity; preview(); } }, "Sell all"));
+  }
+  box.replaceChildren(...children);
+}
+
+function readOrder() {
+  const ticker = $("ticker").value.trim().toUpperCase();
+  const quantity = Number($("quantity").value);
+  const priceText = $("price").value;
+  const price = Number(priceText);
+  if (!/^[A-Z0-9]{1,10}$/.test(ticker)) return null;
+  if (!Number.isInteger(quantity) || quantity <= 0) return null;
+  if (priceText === "" || !(price >= 0) || !/^\d+(\.\d{1,2})?$/.test(priceText)) return null;
+  return { ticker, operation: state.side, "unit-cost": price, quantity };
+}
+
+let previewTimer;
+function preview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(runPreview, 200);
+}
+
+async function runPreview() {
+  const order = readOrder();
+  const box = $("preview");
+  const submit = $("order-submit");
+  submit.textContent = state.side === "buy" ? "Buy" : "Sell";
+  if (!order) {
+    submit.disabled = true;
+    box.replaceChildren(el("div", { class: "muted", style: "font-size:13.5px" }, "Fill in ticker, quantity and a price with up to 2 decimals to preview the order."));
+    return;
+  }
+  const seq = ++state.previewSeq;
+  try {
+    const quote = await api("/api/broker/quote", { method: "POST", body: order });
+    if (seq !== state.previewSeq) return; // a newer keystroke already asked again
+    box.replaceChildren(...quoteLines(quote), explanation(quote));
+    submit.disabled = false;
+    submit.textContent = `${state.side === "buy" ? "Buy" : "Sell"} ${quote.quantity} ${quote.ticker} · ${money(quote.totalValue)}`;
+  } catch (err) {
+    if (seq !== state.previewSeq) return;
+    if (err.status === 401) return showAuth();
+    submit.disabled = true;
+    box.replaceChildren(el("div", { class: "error" }, err.message));
+  }
+}
+
+function kv(label, value, cls = "") {
+  return el("div", { class: "kv" + (cls.includes("total") ? " total" : "") }, el("span", {}, label), el("span", { class: "num " + cls.replace("total", "") }, value));
+}
+
+function quoteLines(q) {
+  if (q.operation === "buy") {
+    return [
+      kv("Order total", money(q.totalValue)),
+      kv("New average price", money(q.averagePriceAfter)),
+      kv("Position after", `${q.positionAfter} shares`),
+      kv("Tax", money(0), "total"),
+    ];
+  }
+  return [
+    kv("Sale total", money(q.totalValue)),
+    kv("Average price", money(q.averagePriceBefore)),
+    kv("Gross result", signed(q.result), tone(q.result)),
+    kv("Exemption", q.result < 0 ? "n/a (loss)" : q.exempt ? "Exempt (≤ $20,000)" : "Not exempt"),
+    kv("Capital-gains tax (20%)", money(q.tax)),
+    kv("Net result", signed(q.netResult), "total " + tone(q.netResult)),
+  ];
+}
+
+/** The same walk-through the backend did, in words. */
+function explain(t) {
+  const lines = [];
+  if (t.operation === "buy") {
+    lines.push(`Bought ${t.quantity} × ${money(t.unitCost)} = ${money(t.totalValue)}. Buys are never taxed.`);
+    lines.push(`Average price is now ${money(t.averagePriceAfter)} over ${t.positionAfter} shares.`);
+    return lines;
+  }
+  const result = Number(t.result), tax = Number(t.tax);
+  const lossBefore = Number(t.accumulatedLossBefore), lossAfter = Number(t.accumulatedLossAfter);
+  lines.push(`Sold ${t.quantity} × ${money(t.unitCost)} = ${money(t.totalValue)}.`);
+  lines.push(`Against your average price of ${money(t.averagePriceBefore)}: ${t.quantity} × (${money(t.unitCost)} − ${money(t.averagePriceBefore)}) = ${signed(result)}.`);
+  if (result < 0) {
+    lines.push(`That is a loss, so no tax. It is carried forward to offset future profits (loss to offset now ${money(lossAfter)}).`);
+  } else if (t.exempt) {
+    lines.push(`The sale total is ≤ ${money(EXEMPTION_LIMIT)}, so it is exempt: no tax.`);
+    if (lossBefore > 0) lines.push(`An exempt profit does not use up your loss carried forward (still ${money(lossAfter)}).`);
+  } else {
+    const used = Math.min(lossBefore, result);
+    if (used > 0) lines.push(`Loss carried forward offsets ${money(used)} of the profit, leaving ${money(result - used)} taxable.`);
+    if (tax > 0) lines.push(`Tax: 20% × ${money(result - used)} = ${money(tax)}.`);
+    else lines.push(`The profit was fully offset, so no tax. Loss still to offset: ${money(lossAfter)}.`);
+  }
+  if (result !== 0) lines.push(`Net after tax: ${signed(t.netResult)}. You now hold ${t.positionAfter} shares.`);
+  return lines;
+}
+
+function explanation(t) {
+  return el("div", { class: "explain" }, explain(t).map((l) => el("p", {}, l)));
+}
+
+$("ticker").addEventListener("input", () => { renderChips(); renderHolding(); preview(); });
+$("quantity").addEventListener("input", preview);
+$("price").addEventListener("input", preview);
+
+$("order-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const order = readOrder();
+  if (!order) return;
+  $("order-submit").disabled = true;
+  try {
+    const placed = await api("/api/broker/trades", { method: "POST", body: order });
+    toast(`${placed.operation === "buy" ? "Bought" : "Sold"} ${placed.quantity} ${placed.ticker}`, explain(placed));
+    $("quantity").value = "";
+    await refresh();
+  } catch (err) {
+    if (err.status === 401) return showAuth();
+    $("preview").replaceChildren(el("div", { class: "error" }, err.message));
+  }
+});
+
+let toastTimer;
+function toast(title, lines) {
+  $("toast-title").textContent = title;
+  $("toast-body").replaceChildren(el("div", { class: "explain", style: "margin:0" }, lines.map((l) => el("p", {}, l))));
+  $("toast").hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => ($("toast").hidden = true), 9000);
+}
+$("toast").onclick = () => ($("toast").hidden = true);
+
+// ---------------- dashboard ----------------
+function setStat(id, value, colored) {
+  const node = $(id);
+  node.textContent = colored ? signed(value) : money(value);
+  node.className = "value num " + (colored ? tone(value) : "");
+}
+
+function renderAccount() {
+  const a = state.account;
+  setStat("s-invested", a.investedValue);
+  setStat("s-realized", a.realizedResult, true);
+  setStat("s-tax", a.taxPaid);
+  setStat("s-net", a.netResult, true);
+
+  $("positions").replaceChildren(...(a.positions.length ? a.positions.map((p) =>
+    el("tr", { class: "clickable" + (p.quantity === 0 ? " closed" : ""), title: "Trade " + p.ticker, onclick: () => pickTicker(p.ticker) },
+      el("td", { class: "ticker" }, p.ticker),
+      el("td", { class: "r num" }, p.quantity),
+      el("td", { class: "r num" }, p.quantity ? money(p.averagePrice) : "—"),
+      el("td", { class: "r num" }, money(p.investedValue)),
+      el("td", { class: "r num " + tone(p.realizedResult) }, signed(p.realizedResult)),
+      el("td", { class: "r num" }, money(p.taxPaid)),
+      el("td", { class: "r num" }, Number(p.accumulatedLoss) ? money(p.accumulatedLoss) : "—")))
+    : [el("tr", {}, el("td", { colspan: 7, class: "empty" }, "No positions yet. Place your first buy on the left."))]));
+
+  $("history").replaceChildren(...(a.trades.length ? a.trades.flatMap((t) => {
+    const sell = t.operation === "sell";
+    const detail = el("tr", { class: "why-row", hidden: "" }, el("td", { colspan: 9 }, explanation(t)));
+    const toggle = el("button", { type: "button", class: "link", "aria-expanded": "false", onclick: () => {
+      detail.hidden = !detail.hidden;
+      toggle.setAttribute("aria-expanded", String(!detail.hidden));
+    } }, "Why?");
+    return [el("tr", {},
+      el("td", { class: "muted" }, dateFmt.format(new Date(t.executedAt))),
+      el("td", {}, el("span", { class: "badge " + t.operation }, sell ? "SELL" : "BUY")),
+      el("td", { class: "ticker" }, t.ticker),
+      el("td", { class: "r num" }, t.quantity),
+      el("td", { class: "r num" }, money(t.unitCost)),
+      el("td", { class: "r num" }, money(t.totalValue)),
+      el("td", { class: "r num " + (sell ? tone(t.result) : "") }, sell ? signed(t.result) : "—"),
+      el("td", { class: "r num" }, sell ? [money(t.tax), " ", Number(t.result) > 0 ? el("span", { class: "badge " + (t.exempt ? "exempt" : "taxed") }, t.exempt ? "exempt" : "20%") : null] : "—"),
+      el("td", { class: "r" }, toggle)), detail];
+  }) : [el("tr", {}, el("td", { colspan: 9, class: "empty" }, "Your trades will show up here."))]));
+}
+
+// ---------------- boot ----------------
+renderChips();
+api("/api/auth/me").then(showApp).catch(showAuth);
+</script>
+</body>
+</html>

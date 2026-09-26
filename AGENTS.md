@@ -10,8 +10,9 @@ over-engineered for its size — the point is to practice clean architecture, a
 domain state machine, and asynchronous processing, not to ship the smallest
 solution.
 
-Build tool: Maven. Persistence: in-memory H2 (wiped on restart). API docs:
-springdoc / Swagger UI.
+Build tool: Maven. Persistence: in-memory H2 (wiped on restart); `compose.yaml`
+overrides it to a file on a Docker volume. API docs: springdoc / Swagger UI.
+There is also a **broker UI** at `/` (see "The broker UI" below).
 
 ## Commands
 
@@ -62,15 +63,20 @@ domain/            pure Java core — the tax rules
   Money            money value object: 2dp, HALF_UP, centralizes rounding
   Trade            one buy/sell (type, unitCost: Money, quantity)
   Tax, TradeResult, TradeType
-  TaxCalculator    walks a List<Trade>, returns List<TradeResult>
+  TaxCalculator    walks a List<Trade>, returns List<TradeResult>; breakdown() adds
+                   the full walk (avg price, result, exemption, loss) per trade
+  TradeBreakdown   one step of that walk
   portfolio/       Portfolio aggregate = state machine (see below)
   error/           CapitalGainsException hierarchy
 format/            TradeJson / TaxJson — the challenge's JSON DTOs, shared by web + cli
 orders/            async work queue: SimulationOrder entity, OrderStatus, OrderView, repo
+broker/            JPA: UserAccount (app_user) and PlacedTrade, the broker UI's data
 application/        use cases / orchestration (Spring @Service beans)
   SubmitOrderService, OrderProcessor, OrderExecution, OrderQueryService, HistoryService
+  AuthService, PasswordHasher, BrokerService (+ TradeView / PositionView / AccountView)
 history/           JPA: Simulation entity + read models (SimulationDetail, SimulationSummary)
-web/               REST controllers + ApiExceptionHandler
+web/               REST controllers + ApiExceptionHandler; Sessions (login state)
+resources/static/  index.html: the broker UI, vanilla JS, no build step
 cli/               CliRunner — stdin adapter, profile "cli", synchronous
 config/            Clock bean, OpenAPI bean
 ```
@@ -78,7 +84,7 @@ config/            Clock bean, OpenAPI bean
 - `domain` and `format` know nothing of Spring or persistence.
 - `web` and `cli` are independent inbound adapters — they must not reference each
   other.
-- `history` and `orders` are infrastructure — the application depends on them,
+- `history`, `orders` and `broker` are infrastructure — the application depends on them,
   not vice versa.
 - If you add a package, add or extend the matching ArchUnit rule.
 
@@ -143,6 +149,25 @@ broker. `orders/`, `application/OrderProcessor`, `application/OrderExecution`.
 
 Full write-up: [`docs/async-orders.md`](docs/async-orders.md).
 
+## The broker UI
+
+`src/main/resources/static/index.html` (served at `/`) is a simulated brokerage:
+sign-up/login, buy/sell a ticker, preview a trade, portfolio and statement.
+One self-contained file, vanilla JS, no framework, no Node build — keep it that way.
+
+- **Auth** is the servlet `HttpSession` (`web/Sessions`), cookie HttpOnly +
+  SameSite=Strict, session id rotated on login. Passwords are PBKDF2 via the JDK
+  (`application/PasswordHasher`) — no Spring Security. The only password rule
+  is length >= 6, by product decision (`123456` is allowed). Usernames are
+  case-insensitive (stored lowercase).
+- **Tax** is never stored. `BrokerService` replays the user's trades for a
+  ticker through `TaxCalculator.breakdown` on every quote, trade and account
+  read. Each ticker is an independent `Portfolio`.
+- The broker path is **synchronous** (like the CLI): a user placing an order
+  expects the result on screen, not a job to poll.
+- `place` locks the user row (`UserAccountRepository.lockById`) so two
+  concurrent sells cannot both pass the "enough shares" check.
+
 ## Gotchas
 
 - **`@Transactional` self-invocation.** Spring's proxy is bypassed when a bean
@@ -173,6 +198,7 @@ Full write-up: [`docs/async-orders.md`](docs/async-orders.md).
 | add / change an API route | `web/` + a `@SpringBootTest` MockMvc test |
 | change the async lifecycle | `orders/SimulationOrder` (guards) + `application/OrderExecution` / `OrderProcessor` + `OrderProcessorTest` |
 | add a persisted read model | `history/` (assessed simulations) or `orders/` (orders) |
+| change the broker UI | `resources/static/index.html` + `BrokerControllerTest` for any API change |
 | add config | `application.properties` + inject with `@Value` |
 
 ## Testing
