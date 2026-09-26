@@ -10,9 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-      - run: mvn -B verify
+      # Compiles and runs every test inside the Dockerfile's build stage
+      - run: docker build -t capital-gains .
+      - name: Smoke test (CLI mode)
+        run: docker run -i --rm -m 256m capital-gains --spring.profiles.active=cli < examples/input.txt
