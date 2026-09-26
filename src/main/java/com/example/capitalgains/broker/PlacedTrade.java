@@ -17,7 +17,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * A buy or sell a user executed on the broker. The tax is not stored: it is
+ * A buy or sell a user executed on the broker, with the brokerage fee charged
+ * at the time (a later change of the fee setting does not rewrite history).
+ * The tax is not stored: it is
  * recomputed by replaying the user's trades for the ticker, so the rules stay
  * in one place (the domain).
  */
@@ -45,6 +47,10 @@ public class PlacedTrade {
     @Column(nullable = false)
     private long quantity;
 
+    /** Nullable so rows from before fees existed read as zero. */
+    @Column(precision = 19, scale = 2)
+    private BigDecimal fee;
+
     @Column(name = "executed_at", nullable = false)
     private Instant executedAt;
 
@@ -58,6 +64,7 @@ public class PlacedTrade {
         this.type = trade.type();
         this.unitCost = trade.unitCost().amount();
         this.quantity = trade.quantity();
+        this.fee = trade.fee().amount();
         this.executedAt = executedAt;
     }
 
@@ -66,7 +73,7 @@ public class PlacedTrade {
     }
 
     public Trade toDomain() {
-        return new Trade(type, Money.of(unitCost), quantity);
+        return new Trade(type, Money.of(unitCost), quantity, fee == null ? Money.ZERO : Money.of(fee));
     }
 
     public Long getId() {

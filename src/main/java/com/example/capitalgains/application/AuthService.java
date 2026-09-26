@@ -44,6 +44,16 @@ public class AuthService {
         }
     }
 
+    /** Needs the current password even with a live session, so a borrowed session cannot lock the owner out. */
+    @Transactional
+    public void changePassword(Long userId, String currentPassword, String newPassword) {
+        UserAccount account = users.findById(userId).orElseThrow(NotAuthenticatedException::new);
+        if (!hasher.matches(currentPassword, account.getPasswordHash())) {
+            throw new IncorrectPasswordException();
+        }
+        account.changePasswordHash(hasher.hash(newPassword));
+    }
+
     @Transactional(readOnly = true)
     public UserView login(String username, String password) {
         return users.findByUsername(normalize(username))

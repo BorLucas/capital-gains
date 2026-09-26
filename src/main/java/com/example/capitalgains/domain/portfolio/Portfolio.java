@@ -16,11 +16,12 @@ import java.math.BigDecimal;
  * and {@link #accumulatedLoss}. Each instance represents a single simulation
  * and is not thread-safe.</p>
  *
- * <p>Rules applied on sell transitions:</p>
+ * <p>A buy's fee is part of its cost, so it raises the average price. Rules
+ * applied on sell transitions:</p>
  * <ol>
- *   <li>result = (sell price - average price) x quantity;</li>
+ *   <li>result = (sell total - fee) - average price x quantity;</li>
  *   <li>a loss (result &lt; 0) is always accumulated, even on an exempt sell;</li>
- *   <li>an exempt sell (total value &le; 20,000) pays no tax, and an exempt
+ *   <li>an exempt sell (gross total value &le; 20,000, before the fee) pays no tax, and an exempt
  *       profit does not consume the accumulated loss;</li>
  *   <li>outside the exemption, the profit offsets the accumulated loss and 20%
  *       of what remains becomes tax.</li>
@@ -89,9 +90,9 @@ public final class Portfolio {
         return Tax.of(taxableProfit.applyRate(TAX_RATE));
     }
 
-    /** Gross result of a sell against the current average price; negative is a loss. */
+    /** Result of a sell net of its fee, against the current average price; negative is a loss. */
     public Money resultOf(Trade sell) {
-        return sell.unitCost().minus(averagePrice).times(sell.quantity());
+        return sell.netValue().minus(averagePrice.times(sell.quantity()));
     }
 
     /** A sell whose total value is within the exemption limit pays no tax on its profit. */
@@ -109,10 +110,10 @@ public final class Portfolio {
 
     private Money newAveragePrice(Trade buy) {
         if (quantity == 0L) {
-            return buy.unitCost();
+            return buy.netValue().dividedBy(buy.quantity());
         }
         Money valueHeld = averagePrice.times(quantity);
-        Money valueBought = buy.totalValue();
+        Money valueBought = buy.netValue();
         long totalQuantity = quantity + buy.quantity();
         return valueHeld.plus(valueBought).dividedBy(totalQuantity);
     }

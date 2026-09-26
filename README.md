@@ -68,12 +68,18 @@ docker run -i --rm capital-gains --spring.profiles.active=cli < examples/input.t
 |--------|-------|-------------|
 | `POST` | `/api/auth/register` | create an account (password: 6+ characters, no other rule) and log in · **201** |
 | `POST` | `/api/auth/login` / `/api/auth/logout` | start / end the session (`JSESSIONID` cookie) |
-| `GET`  | `/api/auth/me` | the logged-in user · **401** without a session |
+| `GET`  | `/api/auth/me` | the logged-in user and session info (login time, idle timeout) · **401** without a session |
+| `POST` | `/api/auth/password` | change the password; needs the current one (**400** if wrong) |
+| `GET` / `PUT` | `/api/broker/settings` | brokerage fee per order (default 5.00) |
 | `GET`  | `/api/broker/account` | totals, positions per ticker, trade log with the full tax breakdown |
 | `POST` | `/api/broker/quote` | preview a trade (result, exemption, tax) without executing it |
 | `POST` | `/api/broker/trades` | execute a trade · **201**, **422** when selling more than held |
 
 Each ticker is its own position (average price and loss carried forward).
+A **brokerage fee** (per order, set in Settings) is charged on every buy and sell:
+it adds to a buy's cost, so it raises the average price, and it comes out of a
+sale's proceeds, so it lowers the taxable profit. The $20,000 exemption looks at
+the gross sale value. Each trade stores the fee it was charged.
 Only the raw trades are stored; results and taxes are replayed through the same
 `TaxCalculator`, so the broker and the challenge API can never disagree.
 

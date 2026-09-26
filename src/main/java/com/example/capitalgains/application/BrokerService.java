@@ -2,6 +2,7 @@ package com.example.capitalgains.application;
 
 import com.example.capitalgains.broker.PlacedTrade;
 import com.example.capitalgains.broker.PlacedTradeRepository;
+import com.example.capitalgains.broker.UserAccount;
 import com.example.capitalgains.broker.UserAccountRepository;
 import com.example.capitalgains.domain.Money;
 import com.example.capitalgains.domain.TaxCalculator;
@@ -25,7 +26,9 @@ import java.util.stream.Collectors;
  * The broker simulator: users buy and sell tickers, and every sell is taxed by
  * the same {@link TaxCalculator} the challenge API uses. Each ticker is its own
  * position (its own average price and loss carried forward), and nothing but
- * the raw trades is stored: results and taxes are always a replay.
+ * the raw trades (with the fee each was charged) is stored: results and taxes
+ * are always a replay. The brokerage fee comes from the user's settings, never
+ * from the request.
  *
  * <p>This path is synchronous on purpose, like the CLI: a user placing an order
  * expects the result on screen right away, not a queued job to poll.</p>
@@ -47,8 +50,9 @@ public class BrokerService {
     /** What the trade would do, without executing it. */
     @Transactional(readOnly = true)
     public TradeView quote(Long userId, String ticker, Trade trade) {
+        UserAccount user = users.findById(userId).orElseThrow(NotAuthenticatedException::new);
         String symbol = normalize(ticker);
-        return TradeView.of(null, symbol, simulate(userId, symbol, trade), null);
+        return TradeView.of(null, symbol, simulate(userId, symbol, withFee(trade, user)), null);
     }
 
     /**
@@ -57,10 +61,11 @@ public class BrokerService {
      */
     @Transactional
     public TradeView place(Long userId, String ticker, Trade trade) {
-        users.lockById(userId).orElseThrow(NotAuthenticatedException::new);
+        UserAccount user = users.lockById(userId).orElseThrow(NotAuthenticatedException::new);
         String symbol = normalize(ticker);
-        TradeBreakdown breakdown = simulate(userId, symbol, trade);
-        PlacedTrade saved = trades.save(PlacedTrade.of(userId, symbol, trade, Instant.now(clock)));
+        Trade charged = withFee(trade, user);
+        TradeBreakdown breakdown = simulate(userId, symbol, charged);
+        PlacedTrade saved = trades.save(PlacedTrade.of(userId, symbol, charged, Instant.now(clock)));
         return TradeView.of(saved.getId(), symbol, breakdown, saved.getExecutedAt());
     }
 
@@ -84,6 +89,24 @@ public class BrokerService {
         BigDecimal realized = sum(positions.stream().map(PositionView::realizedResult).toList());
         BigDecimal tax = sum(positions.stream().map(PositionView::taxPaid).toList());
         return new AccountView(invested, realized, tax, realized.subtract(tax), positions, log);
+    }
+
+    @Transactional(readOnly = true)
+    public BrokerSettings settings(Long userId) {
+        UserAccount user = users.findById(userId).orElseThrow(NotAuthenticatedException::new);
+        return new BrokerSettings(user.getBrokerageFee());
+    }
+
+    /** Applies to orders placed from now on; past trades keep the fee they were charged. */
+    @Transactional
+    public BrokerSettings updateSettings(Long userId, BrokerSettings settings) {
+        UserAccount user = users.findById(userId).orElseThrow(NotAuthenticatedException::new);
+        user.setBrokerageFee(Money.of(settings.brokerageFee()).amount());
+        return new BrokerSettings(user.getBrokerageFee());
+    }
+
+    private static Trade withFee(Trade trade, UserAccount user) {
+        return trade.withFee(Money.of(user.getBrokerageFee()));
     }
 
     private TradeBreakdown simulate(Long userId, String ticker, Trade trade) {

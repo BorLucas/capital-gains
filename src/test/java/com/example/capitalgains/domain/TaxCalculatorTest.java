@@ -1,5 +1,6 @@
 package com.example.capitalgains.domain;
 
+import com.example.capitalgains.domain.error.InvalidTradeException;
 import com.example.capitalgains.domain.error.SellExceedsPortfolioException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -227,6 +228,49 @@ class TaxCalculatorTest {
             assertThat(taxed.accumulatedLossAfter()).isEqualTo(Money.ZERO);
             assertThat(taxed.tax().amount()).isEqualTo(Money.of("1000.00"));
             assertThat(taxed.netResult()).isEqualTo(Money.of("29000.00"));
+        }
+
+        @Test
+        @DisplayName("a buy fee raises the average price and a sell fee lowers the result")
+        void feesEnterTheCost() {
+            var walk = calculator.breakdown(List.of(
+                    Trade.buy("10.00", 10).withFee(Money.of("5.00")),
+                    Trade.sell("50.00", 5).withFee(Money.of("5.00"))));
+
+            // (10 x 10.00 + 5.00) / 10
+            assertThat(walk.get(0).averagePriceAfter()).isEqualTo(Money.of("10.50"));
+
+            var sell = walk.get(1);
+            // (250.00 - 5.00) - 5 x 10.50
+            assertThat(sell.result()).isEqualTo(Money.of("192.50"));
+            assertThat(sell.exempt()).isTrue();
+            assertThat(sell.netResult()).isEqualTo(Money.of("192.50"));
+        }
+
+        @Test
+        @DisplayName("fees reduce the taxable profit; the exemption looks at the gross sale")
+        void feesReduceTheTax() {
+            var sell = calculator.breakdown(List.of(
+                    Trade.buy("10.00", 1000).withFee(Money.of("20.00")),
+                    Trade.sell("20.00", 1000).withFee(Money.of("20.00")))).get(1);
+
+            // gross 20,000.00 is exempt even though the net proceeds are lower
+            assertThat(sell.exempt()).isTrue();
+
+            var taxed = calculator.breakdown(List.of(
+                    Trade.buy("10.00", 1000).withFee(Money.of("20.00")),
+                    Trade.sell("30.00", 1000).withFee(Money.of("20.00")))).get(1);
+
+            // (30,000.00 - 20.00) - 1000 x 10.02 = 19,960.00 -> 20% = 3,992.00
+            assertThat(taxed.result()).isEqualTo(Money.of("19960.00"));
+            assertThat(taxed.tax().amount()).isEqualTo(Money.of("3992.00"));
+        }
+
+        @Test
+        @DisplayName("a negative fee is rejected")
+        void negativeFee() {
+            assertThatThrownBy(() -> Trade.buy("10.00", 1).withFee(Money.of("-1.00")))
+                    .isInstanceOf(InvalidTradeException.class);
         }
 
         @Test
