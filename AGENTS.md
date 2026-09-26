@@ -24,6 +24,11 @@ java -jar target/capital-gains-0.0.1-SNAPSHOT.jar --spring.profiles.active=cli <
 
 There is no build wrapper (`mvnw`); a local Maven + JDK 21 is assumed.
 
+Docker: `docker compose up --build` runs the API (256 MB / 1 CPU cap). The
+`Dockerfile` build stage runs `mvn verify`, so a failing test fails the image.
+CI (`.github/workflows/ci.yml`, job `build`) is just `docker build` plus a CLI
+smoke test with `examples/input.txt` — keep tests passing inside Docker.
+
 ## Hard conventions
 
 1. **English only.** Every identifier, comment, Javadoc, error message, commit
